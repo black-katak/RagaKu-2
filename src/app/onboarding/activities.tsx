@@ -180,7 +180,7 @@ export default function ActivitiesStep() {
           <PillButton
             label="BUAT PROGRAM RAGAKU AI PERSONAL SAYA →"
             disabled={selectedSports.length < 2}
-            onPress={() => router.replace('/workout')}
+            onPress={() => router.replace('/beranda')}
           />
           <ThemedText type="small" themeColor="textSecondary" style={styles.footerNote}>
             ENKRIPSI BIOMETRIK & KEBUGARAN TERJAMIN

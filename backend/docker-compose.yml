@@ -1,0 +1,26 @@
+# RagaKu backend compose.
+#
+# The API service runs FastAPI. The measurement model (TensorFlow 1.13.1) is
+# built separately (measurement.Dockerfile) because its build context is the
+# model repository, not this backend folder. The API shells out to the
+# measurement container per request via MEASUREMENT_COMMAND, so the API
+# container needs access to the Docker socket for that path, OR you can run the
+# measurement model as a long-running HTTP sidecar in a later iteration.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Example: let the API invoke the measurement image. Requires the Docker
+      # socket mount below and the ragaku-measure image to be built.
+      # MEASUREMENT_COMMAND: "docker run --rm -v /tmp:/tmp ragaku-measure python3 inference.py -i {image} -ht {height}"
+      CORS_ALLOW_ORIGINS: "*"
+    volumes:
+      - /tmp:/tmp
+      # Uncomment to allow the API to launch the measurement container:
+      # - /var/run/docker.sock:/var/run/docker.sock

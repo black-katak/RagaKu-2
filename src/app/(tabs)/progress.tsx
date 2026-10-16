@@ -1,44 +1,96 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useOnboarding } from '@/components/onboarding/onboarding-context';
+import { Disclaimer } from '@/components/disclaimer';
+import { useAuth } from '@/components/auth-context';
+import { useProfile } from '@/components/profile-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { LineChart } from '@/components/ui/line-chart';
+import { NumberStepper } from '@/components/ui/number-stepper';
 import { PillButton } from '@/components/ui/pill-button';
 import { StatTile } from '@/components/ui/stat-tile';
 import { BottomTabInset, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from '@/lib/api';
+import { auth } from '@/lib/auth';
+import type { ProgressEntry } from '@/lib/model';
+import { storage } from '@/lib/storage';
 
-const WEEK_DAYS = [
-  { label: 'SEN', done: true, tag: 'Upper' },
-  { label: 'SEL', done: true, tag: 'Lower' },
-  { label: 'RAB', done: true, tag: 'Core' },
-  { label: 'KAM', done: false, rest: true, tag: 'Rest' },
-  { label: 'JUM', done: true, tag: 'Push' },
-  { label: 'SAB', done: true, tag: 'Pull' },
-  { label: 'MIN', done: false, rest: true, tag: 'Rest' },
-];
-
-export default function ProgressTelemetryScreen() {
+export default function ProgressScreen() {
   const theme = useTheme();
-  const { data } = useOnboarding();
+  const { profile, clearAll } = useProfile();
+  const { signOut } = useAuth();
 
-  const baseline = data.weightKg;
-  const target = data.targetWeightKg;
-  const diff = baseline - target;
-  // Day-28 progress fraction of the baseline→target diff (matches Figma's -4.6kg/6kg demo curve).
-  const DAY28_PROGRESS = 23 / 30;
-  const current = +(baseline - diff * DAY28_PROGRESS).toFixed(1);
-  const weightSeries = [
-    baseline,
-    +(baseline - diff * DAY28_PROGRESS * (0.22 / 0.6)).toFixed(1),
-    +(baseline - diff * DAY28_PROGRESS * (0.4 / 0.6)).toFixed(1),
-    current,
-  ];
-  const totalLoss = +(baseline - current).toFixed(1);
+  const [entries, setEntries] = useState<ProgressEntry[]>([]);
+  const [weight, setWeight] = useState(profile.weightKg);
+  const [waist, setWaist] = useState(80);
+
+  const load = useCallback(async () => {
+    setEntries(await storage.getProgress());
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const logEntry = async () => {
+    const date = new Date().toISOString().slice(0, 10);
+    const next = await storage.addProgress({ date, weightKg: weight, waistCm: waist });
+    setEntries(next);
+  };
+
+  const confirmDeleteAll = () => {
+    Alert.alert(
+      'Hapus semua data?',
+      'Semua profil, ukuran, dan progres akan dihapus dari perangkat ini. Tindakan ini tidak dapat dibatalkan.',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            await clearAll();
+            await storage.clearAll();
+            await api.deleteServerData();
+            await auth.clearAll();
+            setEntries([]);
+            await signOut();
+            router.replace('/login');
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmSignOut = () => {
+    Alert.alert('Keluar dari akun?', 'Data tetap tersimpan di perangkat.', [
+      { text: 'Batal', style: 'cancel' },
+      {
+        text: 'Keluar',
+        onPress: async () => {
+          await signOut();
+          router.replace('/login');
+        },
+      },
+    ]);
+  };
+
+  const weightSeries = entries.map((e) => e.weightKg);
+  const waistSeries = entries.filter((e) => e.waistCm != null).map((e) => e.waistCm as number);
+  const whtrSeries = entries
+    .filter((e) => e.waistCm != null)
+    .map((e) => Math.round(((e.waistCm as number) / profile.heightCm) * 1000) / 1000);
+
+  const first = entries[0];
+  const last = entries[entries.length - 1];
+  const weightDelta = first && last ? +(last.weightKg - first.weightKg).toFixed(1) : 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -46,157 +98,96 @@ export default function ProgressTelemetryScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerLeft}>
-              <View style={styles.telemetryRow}>
-                <View style={[styles.liveDot, { backgroundColor: theme.primary }]} />
-                <ThemedText type="smallBold" themeColor="primary" style={styles.eyebrow}>
-                  TELEMETRY AKTIF
-                </ThemedText>
-              </View>
-              <ThemedText style={styles.title}>PROGRES & TRANSFORMASI</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Konsistensi 28 hari terakhir
-              </ThemedText>
-            </View>
-            <View style={[styles.cycleBadge, { borderColor: theme.warning }]}>
-              <ThemedText type="smallBold" themeColor="warning" style={styles.cycleBadgeText}>
-                Siklus 1 · Bulan ke-1
-              </ThemedText>
-            </View>
-          </View>
-
-          <View style={[styles.reminderRow, { backgroundColor: '#FFF7ED', borderColor: theme.warning }]}>
-            <Ionicons name="alarm" size={16} color={theme.warning} />
-            <View style={styles.reminderTextBlock}>
-              <ThemedText type="smallBold" style={styles.reminderTitle}>
-                REMINDER PENGUKURAN BERKALA
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Check-in bobot & lingkar pinggang 2 hari lagi.
-              </ThemedText>
-            </View>
-            <View style={[styles.soonBadge, { backgroundColor: theme.warning }]}>
-              <ThemedText type="small" style={styles.soonBadgeText}>
-                SEGERA
-              </ThemedText>
-            </View>
-          </View>
-
-          <View style={styles.statsRow}>
-            <StatTile label="Berat Badan" value={`${current}`} unit="kg" trend={`↓ ${totalLoss} kg`} />
-            <StatTile label="Massa Otot" value="+1.2" unit="kg" trend="↑ Hipertrofi" />
-            <StatTile label="Pinggang" value="-5" unit="cm" trend="Defisit" trendPositive={false} />
+          <View>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
+              PELACAKAN PROGRES
+            </ThemedText>
+            <ThemedText style={styles.title}>Progres</ThemedText>
           </View>
 
           <Card style={styles.section}>
-            <View style={styles.rowBetween}>
-              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                TRAJEKTORI BERAT BADAN
-              </ThemedText>
-              <View style={[styles.onTrackBadge, { backgroundColor: theme.backgroundSelected }]}>
-                <ThemedText type="small" themeColor="primary">
-                  On Track
-                </ThemedText>
-              </View>
-            </View>
-            <ThemedText type="small" themeColor="textSecondary">
-              Baseline {baseline} kg → Target {target} kg
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+              CATAT HARI INI
             </ThemedText>
-            <LineChart
-              data={weightSeries}
-              labels={['Minggu 1', 'Minggu 2', 'Minggu 3', 'Minggu 4']}
-              targetValue={target}
-              height={140}
+            <NumberStepper
+              label="Berat badan"
+              value={weight}
+              unit="kg"
+              min={30}
+              max={250}
+              step={0.1}
+              onChange={setWeight}
             />
-            <ThemedText type="smallBold" themeColor="primary">
-              Hari 28: {current} kg · Target {target} kg
-            </ThemedText>
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper
+              label="Lingkar pinggang (opsional)"
+              value={waist}
+              unit="cm"
+              min={40}
+              max={200}
+              step={0.5}
+              onChange={setWaist}
+            />
+            <PillButton label="Simpan catatan" onPress={logEntry} />
           </Card>
 
-          <Card style={styles.section}>
-            <View style={styles.rowBetween}>
-              <ThemedText style={styles.cardTitle}>KOMPARASI VISUAL ATLET</ThemedText>
-              <View style={[styles.onTrackBadge, { backgroundColor: theme.backgroundSelected }]}>
-                <ThemedText type="smallBold" themeColor="primary">
-                  -3.8% Lemak Tubuh
-                </ThemedText>
-              </View>
-            </View>
-            <View style={styles.compareRow}>
-              <View style={styles.compareItem}>
-                <View style={[styles.comparePhoto, { backgroundColor: theme.background }]}>
-                  <Ionicons name="body-outline" size={36} color={theme.textSecondary} />
-                </View>
-                <ThemedText type="smallBold">Hari 1</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Kondisi Baseline Awal
-                </ThemedText>
-              </View>
-              <View style={styles.compareItem}>
-                <View style={[styles.comparePhoto, { backgroundColor: theme.backgroundSelected, borderColor: theme.primary, borderWidth: 1.5 }]}>
-                  <Ionicons name="body" size={36} color={theme.primary} />
-                </View>
-                <View style={styles.compareTitleRow}>
-                  <ThemedText type="smallBold" themeColor="primary">
-                    Hari 28
-                  </ThemedText>
-                  <View style={[styles.tonedBadge, { backgroundColor: theme.primary }]}>
-                    <ThemedText type="small" style={styles.tonedBadgeText}>
-                      Toned
-                    </ThemedText>
-                  </View>
-                </View>
-                <ThemedText type="smallBold" themeColor="primary">
-                  +1.2kg Massa Otot
-                </ThemedText>
-              </View>
-            </View>
-          </Card>
-
-          <Card style={styles.section}>
-            <View style={styles.rowBetween}>
-              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                WORKOUT STREAK PEKANAN
-              </ThemedText>
-              <ThemedText themeColor="primary" style={styles.streakPercentFont}>
-                100%
+          {entries.length === 0 ? (
+            <View style={[styles.emptyBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <Ionicons name="trending-up-outline" size={18} color={theme.textSecondary} />
+              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                Belum ada catatan. Simpan berat badanmu untuk mulai melihat tren.
               </ThemedText>
             </View>
-            <View style={styles.weekRow}>
-              {WEEK_DAYS.map((day) => (
-                <View key={day.label} style={styles.dayColumn}>
-                  <View
-                    style={[
-                      styles.dayCircle,
-                      day.rest
-                        ? { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }
-                        : { backgroundColor: day.done ? theme.primary : theme.border },
-                    ]}>
-                    {day.rest ? (
-                      <Ionicons name="moon" size={13} color={theme.textMuted} />
-                    ) : (
-                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                    )}
-                  </View>
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.dayLabel}>
-                    {day.label}
-                  </ThemedText>
-                  <ThemedText
-                    type="small"
-                    themeColor={day.rest ? 'textMuted' : 'textSecondary'}
-                    style={styles.dayTag}>
-                    {day.tag}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.streakSummary}>
-              Sempurna, 5 dari 5 sesi selesai minggu ini.
-            </ThemedText>
-          </Card>
+          ) : (
+            <>
+              <View style={styles.statRow}>
+                <StatTile
+                  label="Berat terbaru"
+                  value={`${last.weightKg}`}
+                  unit="kg"
+                  trend={weightDelta !== 0 ? `${weightDelta > 0 ? '↑' : '↓'} ${Math.abs(weightDelta)} kg` : undefined}
+                  trendPositive={weightDelta <= 0}
+                />
+                <StatTile label="Catatan" value={`${entries.length}`} unit="entri" />
+              </View>
 
-          <PillButton label="UNDUH LAPORAN PROGRES RAGAKU PDF" variant="outline" onPress={() => {}} />
+              {weightSeries.length >= 2 ? (
+                <Card style={styles.section}>
+                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+                    TREN BERAT BADAN
+                  </ThemedText>
+                  <LineChart data={weightSeries} height={140} />
+                </Card>
+              ) : null}
+
+              {waistSeries.length >= 2 ? (
+                <Card style={styles.section}>
+                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+                    TREN LINGKAR PINGGANG
+                  </ThemedText>
+                  <LineChart data={waistSeries} height={120} />
+                </Card>
+              ) : null}
+
+              {whtrSeries.length >= 2 ? (
+                <Card style={styles.section}>
+                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+                    TREN WHtR
+                  </ThemedText>
+                  <LineChart data={whtrSeries} targetValue={0.5} height={120} />
+                  <ThemedText type="small" themeColor="textMuted">
+                    Garis putus-putus = batas sehat 0,5.
+                  </ThemedText>
+                </Card>
+              ) : null}
+            </>
+          )}
+
+          {/* Section 7: user's right to delete all data */}
+          <PillButton label="Hapus semua data saya" variant="outline" onPress={confirmDeleteAll} />
+          <PillButton label="Keluar dari akun" variant="outline" onPress={confirmSignOut} />
+
+          <Disclaimer text="Grafik tren bersifat informatif. Perubahan berat yang drastis sebaiknya dibahas dengan tenaga kesehatan." />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -214,146 +205,18 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     gap: Spacing.three,
   },
-  headerRow: {
+  eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
+  title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
+  section: { gap: Spacing.three },
+  sectionLabel: { letterSpacing: 0.4 },
+  divider: { height: 1 },
+  statRow: { flexDirection: 'row', gap: Spacing.two },
+  emptyBox: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  headerLeft: {
-    flex: 1,
-    gap: 2,
-  },
-  telemetryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  eyebrow: {
-    letterSpacing: 0.6,
-    fontSize: 12,
-  },
-  title: {
-    fontFamily: FontFamily.headingBold,
-    fontSize: 28,
-    lineHeight: 32,
-  },
-  cycleBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  cycleBadgeText: {
-    fontSize: 12,
-  },
-  reminderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
     padding: Spacing.three,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  reminderTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  reminderTitle: {
-    fontSize: 12,
-  },
-  soonBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  soonBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  section: {
-    gap: Spacing.two,
-  },
-  sectionLabel: {
-    letterSpacing: 0.4,
-  },
-  cardTitle: {
-    fontFamily: FontFamily.headingBold,
-    fontSize: 18,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  onTrackBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  compareRow: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-  },
-  compareItem: {
-    flex: 1,
-    gap: 2,
-  },
-  comparePhoto: {
-    height: 120,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  compareTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  tonedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  tonedBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-  },
-  streakPercentFont: {
-    fontFamily: FontFamily.headingBold,
-    fontSize: 18,
-  },
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dayColumn: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  dayCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayLabel: {
-    fontSize: 11,
-  },
-  dayTag: {
-    fontSize: 10,
-  },
-  streakSummary: {
-    marginTop: 4,
-  },
+  emptyText: { flex: 1 },
 });

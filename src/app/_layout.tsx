@@ -17,7 +17,9 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { AuthProvider } from '@/components/auth-context';
 import { OnboardingProvider } from '@/components/onboarding/onboarding-context';
+import { ProfileProvider } from '@/components/profile-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,18 +46,22 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <OnboardingProvider>
-        <AnimatedSplashOverlay />
-        <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="registrasi" />
-          <Stack.Screen name="lupa-password" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="active-session" options={{ presentation: 'fullScreenModal' }} />
-        </Stack>
-      </OnboardingProvider>
+      <AuthProvider>
+        <OnboardingProvider>
+          <ProfileProvider>
+            <AnimatedSplashOverlay />
+            <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="registrasi" />
+              <Stack.Screen name="lupa-password" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="measurement" options={{ presentation: 'fullScreenModal' }} />
+            </Stack>
+          </ProfileProvider>
+        </OnboardingProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

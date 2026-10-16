@@ -19,6 +19,8 @@ import { PillButton } from '@/components/ui/pill-button';
 import { TextField } from '@/components/ui/text-field';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/components/auth-context';
+import { AuthError } from '@/lib/auth';
 
 function isValidEmail(value: string) {
   return /^\S+@\S+\.\S+$/.test(value);
@@ -36,6 +38,7 @@ const STRENGTH_RULES: { key: string; label: string; test: (value: string) => boo
 
 export default function RegistrasiScreen() {
   const theme = useTheme();
+  const { signUp } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -47,6 +50,7 @@ export default function RegistrasiScreen() {
   const [phoneError, setPhoneError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [agreeError, setAgreeError] = useState<string | undefined>();
+  const [formError, setFormError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
 
   const passedRules = STRENGTH_RULES.filter((rule) => rule.test(password));
@@ -59,7 +63,7 @@ export default function RegistrasiScreen() {
           ? 'Sedang'
           : 'Lemah';
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextNameError = name.trim().length >= 3 ? undefined : 'Masukkan nama lengkap';
     const nextEmailError = isValidEmail(email) ? undefined : 'Masukkan email yang valid';
     const nextPhoneError = phone.replace(/\D/g, '').length >= 8 ? undefined : 'Masukkan nomor WhatsApp yang valid';
@@ -71,14 +75,19 @@ export default function RegistrasiScreen() {
     setPhoneError(nextPhoneError);
     setPasswordError(nextPasswordError);
     setAgreeError(nextAgreeError);
+    setFormError(undefined);
 
     if (nextNameError || nextEmailError || nextPhoneError || nextPasswordError || nextAgreeError) return;
 
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await signUp({ name, email, phone, password });
+      router.replace('/onboarding');
+    } catch (e) {
+      setFormError(e instanceof AuthError ? e.message : 'Gagal membuat akun. Coba lagi.');
+    } finally {
       setLoading(false);
-      router.push('/onboarding');
-    }, 700);
+    }
   };
 
   return (
@@ -227,6 +236,12 @@ export default function RegistrasiScreen() {
               {agreeError ? (
                 <ThemedText type="small" themeColor="warning">
                   {agreeError}
+                </ThemedText>
+              ) : null}
+
+              {formError ? (
+                <ThemedText type="small" themeColor="warning">
+                  {formError}
                 </ThemedText>
               ) : null}
 

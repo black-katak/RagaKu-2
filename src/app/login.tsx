@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/components/auth-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { AuthHeader } from '@/components/ui/auth-header';
@@ -19,6 +20,7 @@ import { PillButton } from '@/components/ui/pill-button';
 import { TextField } from '@/components/ui/text-field';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { AuthError } from '@/lib/auth';
 
 function isValidEmail(value: string) {
   return /^\S+@\S+\.\S+$/.test(value);
@@ -26,27 +28,34 @@ function isValidEmail(value: string) {
 
 export default function LoginScreen() {
   const theme = useTheme();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [formError, setFormError] = useState<string | undefined>();
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const nextEmailError = isValidEmail(email) ? undefined : 'Masukkan email yang valid';
     const nextPasswordError = password.length >= 6 ? undefined : 'Kata sandi minimal 6 karakter';
 
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
+    setFormError(undefined);
 
     if (nextEmailError || nextPasswordError) return;
 
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await signIn(email, password);
+      router.replace('/beranda');
+    } catch (e) {
+      setFormError(e instanceof AuthError ? e.message : 'Gagal masuk. Coba lagi.');
+    } finally {
       setLoading(false);
-      router.replace('/onboarding');
-    }, 700);
+    }
   };
 
   return (
@@ -128,6 +137,12 @@ export default function LoginScreen() {
                   </ThemedText>
                 </Pressable>
               </View>
+
+              {formError ? (
+                <ThemedText type="small" themeColor="warning">
+                  {formError}
+                </ThemedText>
+              ) : null}
 
               <PillButton
                 label="MASUK KE RAGAKU"

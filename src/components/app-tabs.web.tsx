@@ -20,17 +20,17 @@ export default function AppTabs() {
       <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="workout" href="/workout" asChild>
-            <TabButton icon="local_fire_department">Workout</TabButton>
+          <TabTrigger name="beranda" href="/beranda" asChild>
+            <TabButton icon="monitor_heart">Beranda</TabButton>
           </TabTrigger>
-          <TabTrigger name="exercise" href="/exercise" asChild>
-            <TabButton icon="fitness_center">Exercise</TabButton>
+          <TabTrigger name="rencana" href="/rencana" asChild>
+            <TabButton icon="assignment">Rencana</TabButton>
+          </TabTrigger>
+          <TabTrigger name="ukuran" href="/ukuran" asChild>
+            <TabButton icon="straighten">Ukuran</TabButton>
           </TabTrigger>
           <TabTrigger name="progress" href="/progress" asChild>
-            <TabButton icon="show_chart">Progress</TabButton>
-          </TabTrigger>
-          <TabTrigger name="vip" href="/vip" asChild>
-            <TabButton icon="crown">VIP</TabButton>
+            <TabButton icon="show_chart">Progres</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -38,13 +38,13 @@ export default function AppTabs() {
   );
 }
 
-type IconKey = 'local_fire_department' | 'fitness_center' | 'show_chart' | 'crown';
+type IconKey = 'monitor_heart' | 'assignment' | 'straighten' | 'show_chart';
 
 const iconMap: Record<IconKey, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
-  local_fire_department: 'fire',
-  fitness_center: 'dumbbell',
+  monitor_heart: 'heart-pulse',
+  assignment: 'clipboard-list-outline',
+  straighten: 'tape-measure',
   show_chart: 'chart-line',
-  crown: 'crown',
 };
 
 export function TabButton({
