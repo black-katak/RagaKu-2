@@ -9,10 +9,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { PillButton } from '@/components/ui/pill-button';
+import { MOCK_USER_ID } from '@/constants/mockUser';
 import { BottomTabInset, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, api, type PlanResponse } from '@/lib/api';
+import { toPlanInputs, type WireCalorieTargets } from '@/lib/mappers';
 import { screeningBlocked } from '@/lib/model';
+import { saveWorkoutPlan } from '@/services/userService';
 
 const INTENSITY_COLOR: Record<string, 'primary' | 'accent' | 'warning'> = {
   ringan: 'accent',
@@ -35,16 +38,45 @@ export default function RencanaScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
+  // Persistence is secondary to generation: a Firestore failure must not hide
+  // a plan the user successfully generated, so it gets its own notice.
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
   const blocked = screeningBlocked(screening);
 
   const generate = async () => {
     setError(null);
+    setSaveWarning(null);
     setLoading(true);
     setPlan(null);
     try {
       const result = await api.plan(profile, screening);
+      // Show the plan first — persistence must never gate the UI.
       setPlan(result);
+
+      // `api.healthSummary` is typed `Promise<unknown>`, so its calorie block
+      // is cast to the wire shape the mapper expects. It is optional context:
+      // without it `targets` is simply omitted from the stored plan.
+      let calories: WireCalorieTargets | null = null;
+      try {
+        const summary = (await api.healthSummary(profile, profile.bmiStandard)) as {
+          calories?: WireCalorieTargets;
+        } | null;
+        calories = summary?.calories ?? null;
+      } catch {
+        // Non-fatal: the plan itself already carries target_calories.
+      }
+
+      try {
+        const { workout } = toPlanInputs(result, { calories });
+        await saveWorkoutPlan(MOCK_USER_ID, workout);
+      } catch (saveError) {
+        setSaveWarning(
+          saveError instanceof Error
+            ? `Rencana dibuat, tetapi gagal disimpan: ${saveError.message}`
+            : 'Rencana dibuat, tetapi gagal disimpan.',
+        );
+      }
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.status === 429) {
@@ -120,6 +152,15 @@ export default function RencanaScreen() {
               <Ionicons name="warning-outline" size={16} color={theme.warning} />
               <ThemedText type="small" style={{ color: theme.warning, flex: 1 }}>
                 {error}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          {saveWarning ? (
+            <View style={[styles.errorBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <Ionicons name="cloud-offline-outline" size={16} color={theme.textSecondary} />
+              <ThemedText type="small" themeColor="textSecondary" style={{ flex: 1 }}>
+                {saveWarning}
               </ThemedText>
             </View>
           ) : null}

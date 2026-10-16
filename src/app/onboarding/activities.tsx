@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/components/auth-context';
 import {
   useOnboarding,
   type Activity,
@@ -17,8 +19,11 @@ import { PillButton } from '@/components/ui/pill-button';
 import { Segmented } from '@/components/ui/segmented';
 import { SelectGridCard } from '@/components/ui/select-items';
 import { SliderTrack } from '@/components/ui/slider-track';
+import { MOCK_USER_ID } from '@/constants/mockUser';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { toUserProfileInput } from '@/lib/mappers';
+import { saveUserProfile } from '@/services/userService';
 
 const SPORT_OPTIONS: {
   value: Activity;
@@ -54,10 +59,43 @@ const DURATION_OPTIONS: { label: string; value: SessionDuration }[] = [
 export default function ActivitiesStep() {
   const theme = useTheme();
   const { data, update, toggleInList } = useOnboarding();
+  const { session } = useAuth();
+
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | undefined>();
 
   const selectedSports = data.activities.filter((activity) =>
     SPORT_OPTIONS.some((option) => option.value === activity),
   );
+
+  /**
+   * Final onboarding submit: persist the collected profile to
+   * `users/{MOCK_USER_ID}` BEFORE entering the main tab layout. A write
+   * failure keeps the user on this screen with a visible error rather than
+   * silently dropping their answers.
+   */
+  const handleSubmit = async () => {
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await saveUserProfile(
+        MOCK_USER_ID,
+        toUserProfileInput(data, {
+          displayName: session?.name,
+          email: session?.email,
+        }),
+      );
+      router.replace('/beranda');
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : 'Gagal menyimpan profil. Coba lagi.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -177,10 +215,17 @@ export default function ActivitiesStep() {
             ) : null}
           </View>
 
+          {saveError ? (
+            <ThemedText type="small" themeColor="warning" style={styles.footerNote}>
+              {saveError}
+            </ThemedText>
+          ) : null}
+
           <PillButton
             label="BUAT PROGRAM RAGAKU AI PERSONAL SAYA →"
-            disabled={selectedSports.length < 2}
-            onPress={() => router.replace('/beranda')}
+            disabled={selectedSports.length < 2 || saving}
+            loading={saving}
+            onPress={handleSubmit}
           />
           <ThemedText type="small" themeColor="textSecondary" style={styles.footerNote}>
             ENKRIPSI BIOMETRIK & KEBUGARAN TERJAMIN
