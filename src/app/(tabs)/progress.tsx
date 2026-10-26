@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Disclaimer } from '@/components/disclaimer';
-import { useAuth } from '@/components/auth-context';
 import { useProfile } from '@/components/profile-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -16,15 +15,12 @@ import { PillButton } from '@/components/ui/pill-button';
 import { StatTile } from '@/components/ui/stat-tile';
 import { BottomTabInset, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api } from '@/lib/api';
-import { auth } from '@/lib/auth';
 import type { ProgressEntry } from '@/lib/model';
 import { storage } from '@/lib/storage';
 
 export default function ProgressScreen() {
   const theme = useTheme();
-  const { profile, clearAll } = useProfile();
-  const { signOut } = useAuth();
+  const { profile } = useProfile();
 
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
   const [weight, setWeight] = useState(profile.weightKg);
@@ -44,42 +40,6 @@ export default function ProgressScreen() {
     const date = new Date().toISOString().slice(0, 10);
     const next = await storage.addProgress({ date, weightKg: weight, waistCm: waist });
     setEntries(next);
-  };
-
-  const confirmDeleteAll = () => {
-    Alert.alert(
-      'Hapus semua data?',
-      'Semua profil, ukuran, dan progres akan dihapus dari perangkat ini. Tindakan ini tidak dapat dibatalkan.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            await clearAll();
-            await storage.clearAll();
-            await api.deleteServerData();
-            await auth.clearAll();
-            setEntries([]);
-            await signOut();
-            router.replace('/login');
-          },
-        },
-      ],
-    );
-  };
-
-  const confirmSignOut = () => {
-    Alert.alert('Keluar dari akun?', 'Data tetap tersimpan di perangkat.', [
-      { text: 'Batal', style: 'cancel' },
-      {
-        text: 'Keluar',
-        onPress: async () => {
-          await signOut();
-          router.replace('/login');
-        },
-      },
-    ]);
   };
 
   const weightSeries = entries.map((e) => e.weightKg);
@@ -183,9 +143,6 @@ export default function ProgressScreen() {
             </>
           )}
 
-          {/* Section 7: user's right to delete all data */}
-          <PillButton label="Hapus semua data saya" variant="outline" onPress={confirmDeleteAll} />
-          <PillButton label="Keluar dari akun" variant="outline" onPress={confirmSignOut} />
 
           <Disclaimer text="Grafik tren bersifat informatif. Perubahan berat yang drastis sebaiknya dibahas dengan tenaga kesehatan." />
         </ScrollView>

@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/components/auth-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { PillButton } from '@/components/ui/pill-button';
@@ -17,6 +18,7 @@ const STATS = [
 
 export default function OnboardingIntroScreen() {
   const theme = useTheme();
+  const { signOut } = useAuth();
 
   return (
     <ThemedView style={styles.container}>
@@ -86,15 +88,14 @@ export default function OnboardingIntroScreen() {
               onPress={() => router.push('/onboarding/biometric')}
             />
 
-            <Pressable
-              hitSlop={8}
-              style={styles.loginRow}
-              onPress={() => router.replace('/login')}>
+            {/* Sampai di sini user SUDAH login (dari registrasi.tsx), jadi /login diblokir
+                guard navigasi. "Masuk ke akun lain" berarti keluar dulu dari akun ini. */}
+            <Pressable hitSlop={8} style={styles.loginRow} onPress={() => signOut()}>
               <ThemedText type="default" themeColor="textSecondary">
-                Sudah punya akun?{' '}
+                Salah akun?{' '}
               </ThemedText>
               <ThemedText type="default" themeColor="primary" style={styles.loginLink}>
-                Masuk
+                Keluar
               </ThemedText>
             </Pressable>
 

@@ -50,7 +50,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email, password);
-      router.replace('/beranda');
+      // Tidak perlu navigasi manual: Stack.Protected di root layout otomatis
+      // mengarahkan setelah sesi berubah (lihat src/app/_layout.tsx).
     } catch (e) {
       setFormError(e instanceof AuthError ? e.message : 'Gagal masuk. Coba lagi.');
     } finally {

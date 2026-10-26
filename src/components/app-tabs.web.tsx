@@ -6,7 +6,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
 
 import { ThemedText } from './themed-text';
@@ -32,19 +32,23 @@ export default function AppTabs() {
           <TabTrigger name="progress" href="/progress" asChild>
             <TabButton icon="show_chart">Progres</TabButton>
           </TabTrigger>
+          <TabTrigger name="profil" href="/profil" asChild>
+            <TabButton icon="account_circle">Profil</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
   );
 }
 
-type IconKey = 'monitor_heart' | 'assignment' | 'straighten' | 'show_chart';
+type IconKey = 'monitor_heart' | 'assignment' | 'straighten' | 'show_chart' | 'account_circle';
 
 const iconMap: Record<IconKey, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
   monitor_heart: 'heart-pulse',
   assignment: 'clipboard-list-outline',
   straighten: 'tape-measure',
   show_chart: 'chart-line',
+  account_circle: 'account-circle-outline',
 };
 
 export function TabButton({
@@ -79,8 +83,6 @@ export function CustomTabList(props: TabListProps) {
         </ThemedText>
 
         {props.children}
-
-        <Ionicons name="person-circle-outline" size={20} color="#94A3B8" style={styles.profileIcon} />
       </ThemedView>
     </View>
   );
@@ -115,8 +117,5 @@ const styles = StyleSheet.create({
   tabItem: {
     alignItems: 'center',
     gap: 2,
-  },
-  profileIcon: {
-    marginLeft: Spacing.three,
   },
 });

@@ -1,5 +1,4 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -53,7 +52,7 @@ const DURATION_OPTIONS: { label: string; value: SessionDuration }[] = [
 
 export default function ActivitiesStep() {
   const theme = useTheme();
-  const { data, update, toggleInList } = useOnboarding();
+  const { data, update, toggleInList, complete } = useOnboarding();
 
   const selectedSports = data.activities.filter((activity) =>
     SPORT_OPTIONS.some((option) => option.value === activity),
@@ -180,7 +179,7 @@ export default function ActivitiesStep() {
           <PillButton
             label="BUAT PROGRAM RAGAKU AI PERSONAL SAYA →"
             disabled={selectedSports.length < 2}
-            onPress={() => router.replace('/beranda')}
+            onPress={() => complete()}
           />
           <ThemedText type="small" themeColor="textSecondary" style={styles.footerNote}>
             ENKRIPSI BIOMETRIK & KEBUGARAN TERJAMIN

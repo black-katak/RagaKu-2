@@ -33,13 +33,14 @@ export default function MeasurementScreen() {
     setError(null);
     try {
       const result = await api.measure(uri, profile.heightCm, profile.gender);
-      await storage.addMeasurement({
+      await storage.upsertMeasurement({
         date: new Date().toISOString().slice(0, 10),
         waistCm: result.waist_cm,
         hipCm: result.hip_cm,
         armLengthCm: result.arm_length_cm,
         shoulderWidthCm: result.shoulder_width_cm,
         chestCm: result.chest_cm,
+        source: 'photo',
       });
       router.back();
     } catch (e) {

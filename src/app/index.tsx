@@ -5,7 +5,7 @@ import { useAuth } from '@/components/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function RootIndex() {
-  const { session, ready } = useAuth();
+  const { session, ready, completed } = useAuth();
   const theme = useTheme();
 
   // Tunggu sesi dimuat agar tidak salah mengarahkan (penyebab loop login sebelumnya).
@@ -17,5 +17,7 @@ export default function RootIndex() {
     );
   }
 
-  return <Redirect href={session ? '/beranda' : '/login'} />;
+  if (!session) return <Redirect href="/login" />;
+  if (!completed) return <Redirect href="/onboarding" />;
+  return <Redirect href="/beranda" />;
 }

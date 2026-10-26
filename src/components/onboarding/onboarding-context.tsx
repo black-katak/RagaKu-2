@@ -1,5 +1,10 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { useAuth } from '@/components/auth-context';
+import { useProfile } from '@/components/profile-context';
+import type { ActivityLevel, Goal as ProfileGoal } from '@/lib/health';
+import type { Profile } from '@/lib/model';
+
 export type Gender = 'pria' | 'wanita' | 'non-biner' | 'rahasia';
 
 export type Injury =
@@ -72,6 +77,35 @@ const defaultData: OnboardingData = {
   sessionDuration: 30,
 };
 
+/**
+ * Petakan jawaban onboarding ke Profile yang dipersistensi (dibaca beranda.tsx/rencana.tsx).
+ * Tipe Gender/Goal onboarding tidak sama dengan health.ts, jadi perlu konversi eksplisit.
+ */
+export function toProfilePatch(data: OnboardingData): Partial<Profile> {
+  // health.ts (rumus Mifflin-St Jeor & US Navy) hanya punya 2 varian gender; 'non-biner'
+  // dan 'rahasia' dipetakan ke 'male' sebagai default netral-rumus, bukan asumsi identitas.
+  const gender: Profile['gender'] = data.gender === 'wanita' ? 'female' : 'male';
+
+  let goal: ProfileGoal = 'maintain';
+  if (data.goals.includes('turun-berat')) goal = 'lose';
+  else if (data.goals.includes('bentuk-otot')) goal = 'gain';
+
+  let activityLevel: ActivityLevel = 'light';
+  if (data.daysPerWeek <= 1) activityLevel = 'sedentary';
+  else if (data.daysPerWeek <= 3) activityLevel = 'light';
+  else if (data.daysPerWeek <= 5) activityLevel = 'active';
+  else activityLevel = 'very_active';
+
+  return {
+    gender,
+    age: data.age,
+    heightCm: data.heightCm,
+    weightKg: data.weightKg,
+    goal,
+    activityLevel,
+  };
+}
+
 interface OnboardingContextValue {
   data: OnboardingData;
   update: (patch: Partial<OnboardingData>) => void;
@@ -80,12 +114,27 @@ interface OnboardingContextValue {
     value: OnboardingData[K][number],
   ) => void;
   reset: () => void;
+  /** Tulis jawaban onboarding ke Profile lalu tandai akun yang login sebagai selesai onboarding. */
+  complete: () => Promise<void>;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<OnboardingData>(defaultData);
+  const { session, completeOnboarding } = useAuth();
+  const { updateProfile } = useProfile();
+
+  // Begitu akun yang login berganti (logout, hapus-semua-data, atau akun lain), bersihkan
+  // draft onboarding supaya akun berikutnya di perangkat ini tidak melihat jawaban akun
+  // sebelumnya. Disesuaikan selama render (pola React resmi untuk "reset state saat sebuah
+  // nilai berubah"), bukan di useEffect, supaya tidak ada render ekstra yang tidak perlu.
+  const sessionId = session?.userId ?? null;
+  const [trackedSessionId, setTrackedSessionId] = useState(sessionId);
+  if (sessionId !== trackedSessionId) {
+    setTrackedSessionId(sessionId);
+    setData(defaultData);
+  }
 
   const value = useMemo<OnboardingContextValue>(
     () => ({
@@ -99,8 +148,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
           return { ...prev, [key]: next };
         }),
       reset: () => setData(defaultData),
+      complete: async () => {
+        updateProfile(toProfilePatch(data));
+        await completeOnboarding();
+      },
     }),
-    [data],
+    [data, updateProfile, completeOnboarding],
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

@@ -31,6 +31,11 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Progres</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="chart.line.uptrend.xyaxis" md="show_chart" />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="profil">
+        <NativeTabs.Trigger.Label>Profil</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="person.crop.circle.fill" md="account_circle" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

@@ -82,7 +82,8 @@ export default function RegistrasiScreen() {
     setLoading(true);
     try {
       await signUp({ name, email, phone, password });
-      router.replace('/onboarding');
+      // Tidak perlu navigasi manual: Stack.Protected di root layout otomatis
+      // mengarahkan ke /onboarding setelah sesi berubah (lihat src/app/_layout.tsx).
     } catch (e) {
       setFormError(e instanceof AuthError ? e.message : 'Gagal membuat akun. Coba lagi.');
     } finally {
