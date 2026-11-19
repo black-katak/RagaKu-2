@@ -215,5 +215,36 @@ export async function getUserWorkoutPlans(
   }
 }
 
+/**
+ * Update the body metrics on `users/{uid}`.
+ *
+ * Writes only `metrics.heightCm` / `metrics.weightKg` (plus `updatedAt`) and
+ * merges, so the other `metrics` fields written by onboarding are preserved.
+ */
+export async function updateUserBodyMetrics(
+  uid: string,
+  heightCm: number,
+  weightKg: number,
+): Promise<void> {
+  requireUid(uid, 'updateUserBodyMetrics');
+
+  try {
+    await setDoc(
+      doc(db, COLLECTIONS.users, uid),
+      {
+        metrics: { heightCm, weightKg },
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    throw new UserServiceError(
+      'updateUserBodyMetrics',
+      `Gagal menyimpan ukuran tubuh (${uid}).`,
+      { cause: error },
+    );
+  }
+}
+
 /** Re-exported for callers that need to build timestamps client-side. */
 export { Timestamp };

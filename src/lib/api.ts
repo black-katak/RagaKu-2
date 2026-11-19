@@ -102,6 +102,21 @@ export interface MeasurementResponse {
   note: string;
 }
 
+export interface BodyEstimateResponse {
+  heightCm: number;
+  weightKg: number;
+  confidence: 'low' | 'medium' | 'high';
+  warnings: string[];
+}
+
+/** snake_case wire shape of `BodyEstimateResult` in backend/app/schemas.py. */
+interface WireBodyEstimate {
+  height_cm: number;
+  weight_kg: number;
+  confidence: 'low' | 'medium' | 'high';
+  warnings?: string[];
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -187,6 +202,41 @@ export const api = {
       );
     }
     return data as MeasurementResponse;
+  },
+
+  async estimateBody(photoUri: string): Promise<BodyEstimateResponse> {
+    const form = new FormData();
+    form.append('photo', {
+      // React Native FormData file shape.
+      uri: photoUri,
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+    } as unknown as Blob);
+
+    let resp: Response;
+    try {
+      resp = await fetch(`${API_BASE_URL}/api/v1/estimate-body`, {
+        method: 'POST',
+        body: form,
+      });
+    } catch {
+      throw new ApiError(`Tidak dapat terhubung ke server (${API_BASE_URL}).`, 0);
+    }
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new ApiError(
+        (data as { detail?: string }).detail ?? 'Estimasi gagal.',
+        resp.status,
+        (data as { error?: string }).error,
+      );
+    }
+    const wire = data as WireBodyEstimate;
+    return {
+      heightCm: wire.height_cm,
+      weightKg: wire.weight_kg,
+      confidence: wire.confidence,
+      warnings: wire.warnings ?? [],
+    };
   },
 
   async deleteServerData() {
