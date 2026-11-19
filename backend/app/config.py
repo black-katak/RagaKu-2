@@ -39,6 +39,10 @@ class Settings:
             os.getenv("MEASUREMENT_TIMEOUT_SECONDS", "120")
         )
 
+        # --- Gemini body estimation (F3: height/weight from photo) ---
+        self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+        self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
         # --- Behaviour flags ---
         self.ai_max_retries: int = int(os.getenv("AI_MAX_RETRIES", "1"))
         self.cors_allow_origins: list[str] = [

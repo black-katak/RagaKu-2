@@ -185,6 +185,19 @@ class PlanResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 # Measurement (PRD F3)
 # --------------------------------------------------------------------------- #
+class BodyEstimateResult(BaseModel):
+    """Height/weight estimate from a photo (Gemini).
+
+    Served by `POST /api/v1/estimate-body` and also used as the Gemini
+    `response_schema`, so field names stay stable across both layers.
+    """
+
+    height_cm: float = Field(..., description="Estimated height in cm.")
+    weight_kg: float = Field(..., description="Estimated weight in kg.")
+    confidence: Literal["low", "medium", "high"] = "low"
+    warnings: list[str] = Field(default_factory=list)
+
+
 class MeasurementResult(BaseModel):
     waist_cm: Optional[float] = None
     hip_cm: Optional[float] = None
