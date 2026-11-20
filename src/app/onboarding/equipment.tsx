@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -34,10 +33,10 @@ const CATEGORY_EQUIPMENT: Record<Category, Equipment[]> = {
 };
 
 const CATEGORY_LABELS: Record<Category, string> = {
-  'full-gym': 'Full Gym',
-  'home-gym': 'Alat Rumahan',
-  bodyweight: 'Tanpa Alat',
-  kardio: 'Kardio Gear',
+  'full-gym': 'Gym lengkap',
+  'home-gym': 'Alat rumahan',
+  bodyweight: 'Tanpa alat',
+  kardio: 'Kardio',
 };
 
 export default function EquipmentStep() {
@@ -66,8 +65,8 @@ export default function EquipmentStep() {
 
   const statusLabel =
     activeCategory === 'home-gym'
-      ? `Alat Rumahan (${homeGymItems.length} peralatan)`
-      : `${CATEGORY_LABELS[activeCategory]} (${data.equipment.length} peralatan)`;
+      ? `Alat rumahan (${homeGymItems.length} alat)`
+      : `${CATEGORY_LABELS[activeCategory]} (${data.equipment.length} alat)`;
 
   return (
     <ThemedView style={styles.container}>
@@ -76,31 +75,21 @@ export default function EquipmentStep() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <OnboardingHeader
-            eyebrow="PERSONALISASI FASILITAS"
+            eyebrow="PERALATAN"
             step={3}
             totalSteps={4}
-            title="PERALATAN APA YANG KAMU MILIKI?"
-            description="RagaKu menyesuaikan program latihan harian dengan fasilitas yang kamu punya hari ini."
+            title="ALAT YANG KAMU PUNYA"
+            description="Program dipilih dari alat yang benar-benar tersedia."
           />
 
-          {/* Category A: Full Gym Commercial (single-select) */}
+          {/* Category A: Full Gym (single-select) */}
           <Pressable onPress={() => selectCategory('full-gym')}>
             <Card selected={activeCategory === 'full-gym'} style={styles.categorySection}>
-              <View style={styles.categoryHeaderRow}>
-                <ThemedText type="subtitle" style={styles.categoryTitle}>
-                  FULL GYM COMMERCIAL
-                </ThemedText>
-                <View style={[styles.categoryBadge, { backgroundColor: theme.background }]}>
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.categoryBadgeText}>
-                    AKSES LENGKAP
-                  </ThemedText>
-                </View>
-              </View>
-              <ThemedText type="small" themeColor="textSecondary">
-                Barbell, Dumbbell, Cable Machine, Bench & Smith Machine
+              <ThemedText type="subtitle" style={styles.categoryTitle}>
+                Gym lengkap
               </ThemedText>
-              <ThemedText type="smallBold" themeColor="primary" style={styles.linkText}>
-                Sesuaikan Alat Gym Tersedia
+              <ThemedText type="small" themeColor="textSecondary">
+                Barbell, dumbbell, mesin kabel, bench
               </ThemedText>
             </Card>
           </Pressable>
@@ -108,18 +97,11 @@ export default function EquipmentStep() {
           {/* Category B: Alat Rumahan / Home Gym (single-select category + multi-select items) */}
           <Pressable onPress={() => selectCategory('home-gym')}>
             <Card selected={activeCategory === 'home-gym'} style={styles.categorySection}>
-              <View style={styles.categoryHeaderRow}>
-                <ThemedText type="subtitle" style={styles.categoryTitle}>
-                  ALAT RUMAHAN (HOME GYM)
-                </ThemedText>
-                <View style={[styles.categoryBadge, { backgroundColor: theme.backgroundSelected }]}>
-                  <ThemedText type="small" themeColor="primary" style={styles.categoryBadgeText}>
-                    AKTIF
-                  </ThemedText>
-                </View>
-              </View>
+              <ThemedText type="subtitle" style={styles.categoryTitle}>
+                Alat rumahan
+              </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Pilih alat yang benar-benar kamu sediakan di rumah:
+                Centang yang kamu punya, atau tulis sendiri.
               </ThemedText>
 
               {activeCategory === 'home-gym' ? (
@@ -132,9 +114,6 @@ export default function EquipmentStep() {
                       onPress={() => toggleInList('equipment', option.value)}
                     />
                   ))}
-                  <ThemedText type="smallBold" themeColor="primary" style={styles.linkText}>
-                    + Tambah Alat Lain
-                  </ThemedText>
                 </View>
               ) : null}
             </Card>
@@ -143,64 +122,36 @@ export default function EquipmentStep() {
           {/* Category C: Tanpa Alat / Bodyweight (single-select) */}
           <Pressable onPress={() => selectCategory('bodyweight')}>
             <Card selected={activeCategory === 'bodyweight'} style={styles.categorySection}>
-              <View style={styles.categoryHeaderRow}>
-                <ThemedText type="subtitle" style={styles.categoryTitle}>
-                  TANPA ALAT (BODYWEIGHT)
-                </ThemedText>
-                <View style={[styles.categoryBadge, { backgroundColor: theme.background }]}>
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.categoryBadgeText}>
-                    BEBAS LOKASI
-                  </ThemedText>
-                </View>
-              </View>
+              <ThemedText type="subtitle" style={styles.categoryTitle}>
+                Tanpa alat
+              </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Hanya butuh matras latihan, latihan di mana saja & kapan saja
+                Hanya badan sendiri dan matras
               </ThemedText>
             </Card>
           </Pressable>
 
-          {/* Category D: Kardio Gear (single-select, visual-only -> maps to bodyweight subset) */}
+          {/* Category D: Kardio (single-select, visual-only -> maps to bodyweight subset) */}
           <Pressable onPress={() => selectCategory('kardio')}>
             <Card selected={activeCategory === 'kardio'} style={styles.categorySection}>
-              <View style={styles.categoryHeaderRow}>
-                <ThemedText type="subtitle" style={styles.categoryTitle}>
-                  KARDIO GEAR
-                </ThemedText>
-                <View style={[styles.categoryBadge, { backgroundColor: theme.background }]}>
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.categoryBadgeText}>
-                    STAMINA
-                  </ThemedText>
-                </View>
-              </View>
+              <ThemedText type="subtitle" style={styles.categoryTitle}>
+                Kardio
+              </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Treadmill, Sepeda Statis, Skipping Rope untuk denyut optimal
+                Treadmill, sepeda statis, tali skipping
               </ThemedText>
             </Card>
           </Pressable>
-
-          <View style={[styles.recommendationBox, { backgroundColor: theme.backgroundSelected }]}>
-            <Ionicons name="sparkles" size={16} color={theme.primary} />
-            <View style={{ flex: 1 }}>
-              <ThemedText type="smallBold" themeColor="primary" style={styles.recommendationLabel}>
-                REKOMENDASI ADAPTIF
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.recommendationText}>
-                AI RagaKu otomatis mengeliminasi gerakan yang membutuhkan mesin jika memilih alat
-                rumahan.
-              </ThemedText>
-            </View>
-          </View>
-          {/* skipped: gym-photo thumbnail near REKOMENDASI ADAPTIF — no image asset exists in project */}
 
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, { backgroundColor: theme.primary }]} />
             <ThemedText type="smallBold" themeColor="textSecondary">
-              STATUS SELEKSI: <ThemedText type="smallBold">{statusLabel}</ThemedText>
+              Terpilih: <ThemedText type="smallBold">{statusLabel}</ThemedText>
             </ThemedText>
           </View>
 
           <PillButton
-            label="LANJUT: OLAHRAGA FAVORIT →"
+            label="Lanjut"
             disabled={data.equipment.length === 0}
             onPress={() => router.push('/onboarding/activities')}
           />
@@ -225,46 +176,15 @@ const styles = StyleSheet.create({
   categorySection: {
     gap: Spacing.two,
   },
-  categoryHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   categoryTitle: {
     fontSize: 20,
     lineHeight: 24,
-  },
-  categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  categoryBadgeText: {
-    fontSize: 10,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  linkText: {
-    fontSize: 11,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
     alignItems: 'center',
-  },
-  recommendationBox: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: Spacing.three,
-    borderRadius: 16,
-  },
-  recommendationText: {
-    flex: 1,
-  },
-  recommendationLabel: {
-    marginBottom: 2,
-    letterSpacing: 0.3,
   },
   statusRow: {
     flexDirection: 'row',

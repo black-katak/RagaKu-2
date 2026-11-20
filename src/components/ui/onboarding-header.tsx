@@ -63,7 +63,7 @@ export function OnboardingHeader({
 
       <View style={styles.progressRow}>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          LANGKAH {step} DARI {totalSteps}
+          {step} dari {totalSteps}
         </ThemedText>
         <ThemedText type="smallBold" themeColor="primary">
           {percent}% Selesai

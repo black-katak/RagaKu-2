@@ -16,20 +16,20 @@ import { SliderTrack } from '@/components/ui/slider-track';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-const GENDER_CARDS: { value: Gender; title: string; subtitle: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'pria', title: 'Pria', subtitle: 'Rasio Massa Otot +12%', icon: 'male' },
-  { value: 'wanita', title: 'Wanita', subtitle: 'Zona Fat-Oxidation +18%', icon: 'female' },
+const GENDER_CARDS: { value: Gender; title: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'pria', title: 'Pria', icon: 'male' },
+  { value: 'wanita', title: 'Wanita', icon: 'female' },
 ];
 
 const OTHER_GENDERS: { value: Gender; label: string }[] = [
   { value: 'non-biner', label: 'Non-biner' },
-  { value: 'rahasia', label: 'Pilih tidak memberitahu' },
+  { value: 'rahasia', label: 'Tidak ingin menyebut' },
 ];
 
 const GOAL_OPTIONS: { value: Goal; title: string; subtitle: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'turun-berat', title: 'Turunkan Berat Badan', subtitle: 'Fat Loss & Defisit Kalori', icon: 'flame' },
-  { value: 'bentuk-otot', title: 'Naikkan Massa Otot', subtitle: 'Hypertrophy & Rekomposisi', icon: 'barbell' },
-  { value: 'ketahanan', title: 'Naikkan Berat Badan', subtitle: 'Bulking Bersih & Surplus', icon: 'trending-up' },
+  { value: 'turun-berat', title: 'Turunkan berat badan', subtitle: 'Defisit kalori terukur', icon: 'flame' },
+  { value: 'bentuk-otot', title: 'Naikkan massa otot', subtitle: 'Latihan beban dan rekomposisi', icon: 'barbell' },
+  { value: 'ketahanan', title: 'Naikkan berat badan', subtitle: 'Surplus kalori bersih', icon: 'trending-up' },
 ];
 
 export default function BiometricStep() {
@@ -42,7 +42,6 @@ export default function BiometricStep() {
   }, [data.gender, update]);
 
   const bmi = calculateBmi(data.targetWeightKg, data.heightCm);
-  const deficit = (data.targetWeightKg - data.weightKg).toFixed(1);
 
   return (
     <ThemedView style={styles.container}>
@@ -51,16 +50,16 @@ export default function BiometricStep() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <OnboardingHeader
-            eyebrow="KALIBRASI BIOMETRIK"
+            eyebrow="DATA DIRI"
             step={1}
             totalSteps={4}
-            title="TENTUKAN TARGET & PROFIL FISIKMU"
-            description="RagaKu AI mengkalkulasi baseline metabolisme dan volume latihan personal secara presisi."
+            title="DATA DIRIMU"
+            description="Dipakai untuk menghitung kebutuhan kalori dan target latihan."
           />
 
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              JENIS KELAMIN BIOLOGIS
+              Jenis kelamin
             </ThemedText>
             <View style={styles.genderRow}>
               {GENDER_CARDS.map((option) => {
@@ -86,9 +85,6 @@ export default function BiometricStep() {
                       <ThemedText type="smallBold" style={styles.genderTitle}>
                         {option.title}
                       </ThemedText>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        {option.subtitle}
-                      </ThemedText>
                     </Card>
                   </Pressable>
                 );
@@ -107,45 +103,30 @@ export default function BiometricStep() {
           </Card>
 
           <Card style={styles.section}>
-            <View style={styles.rowBetween}>
-              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                USIA ATLETIK
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+              Usia
+            </ThemedText>
+            <ThemedText type="title" style={styles.ageValue}>
+              {data.age}
+              <ThemedText type="default" themeColor="textSecondary">
+                {' '}
+                th
               </ThemedText>
-              <ThemedText type="small" themeColor="primary">
-                PEAK PERFORMANCE
-              </ThemedText>
-            </View>
-            <View style={styles.rowBetween}>
-              <ThemedText type="title" style={styles.ageValue}>
-                {data.age}
-                <ThemedText type="default" themeColor="textSecondary">
-                  {' '}
-                  tahun
-                </ThemedText>
-              </ThemedText>
-              <View style={styles.targetRegenBlock}>
-                <ThemedText type="small" themeColor="textMuted" style={styles.targetRegenLabel}>
-                  TARGET REGENERASI
-                </ThemedText>
-                <ThemedText type="smallBold" style={styles.targetRegenValue}>
-                  20–35 Thn (Zone A)
-                </ThemedText>
-              </View>
-            </View>
+            </ThemedText>
             <SliderTrack
               value={data.age}
-              min={15}
-              max={70}
+              min={18}
+              max={80}
               step={1}
               onChange={(age) => update({ age })}
-              labels={['15 thn', '35 thn', '55 thn', '70+']}
+              labels={['18 th', '80 th']}
             />
           </Card>
 
           <Card style={styles.section}>
             <View style={styles.stepperRow}>
               <NumberStepper
-                label="Tinggi Badan"
+                label="Tinggi badan"
                 value={data.heightCm}
                 unit="cm"
                 min={120}
@@ -156,7 +137,7 @@ export default function BiometricStep() {
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <View style={styles.stepperRow}>
               <NumberStepper
-                label="Berat Saat Ini"
+                label="Berat saat ini"
                 value={data.weightKg}
                 unit="kg"
                 min={30}
@@ -169,10 +150,7 @@ export default function BiometricStep() {
           <Card style={styles.section}>
             <View style={styles.rowBetween}>
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                TARGET UTAMA KEBUGARAN
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Pilih Fokus
+                Target utama
               </ThemedText>
             </View>
             <View style={styles.listGap}>
@@ -194,7 +172,7 @@ export default function BiometricStep() {
                       </View>
                       <View style={styles.goalTextBlock}>
                         <ThemedText type="smallBold" style={styles.goalTitle}>
-                          {option.title.toUpperCase()}
+                          {option.title}
                         </ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
                           {option.subtitle}
@@ -216,42 +194,27 @@ export default function BiometricStep() {
 
           <Card style={styles.section}>
             <NumberStepper
-              label="Target Berat Akhir"
+              label="Target berat akhir"
               value={data.targetWeightKg}
               unit="kg"
               min={30}
               max={200}
               onChange={(targetWeightKg) => update({ targetWeightKg })}
             />
-            <View style={[styles.badgeInline, { backgroundColor: theme.backgroundSelected }]}>
-              <ThemedText type="small" themeColor="primary">
-                Defisit {deficit} kg
-              </ThemedText>
-            </View>
             <View style={[styles.bmiRow, { backgroundColor: theme.background }]}>
               <Ionicons name="checkmark-circle" size={16} color={theme.primary} />
               <ThemedText type="small" themeColor="textSecondary">
-                Kalkulasi BMI: {bmi.toFixed(1)} · {bmiCategory(bmi)}
+                BMI di target ini: {bmi.toFixed(1)} ({bmiCategory(bmi)}, standar Asia-Pasifik).
+                Dihitung dari tinggi dan target berat di atas.
               </ThemedText>
             </View>
           </Card>
 
-          <View style={[styles.tipRow, { backgroundColor: theme.backgroundSelected }]}>
-            <Ionicons name="flash" size={16} color={theme.primary} />
-            <ThemedText type="small" themeColor="textSecondary" style={styles.tipText}>
-              RagaKu menetapkan target mingguan moderat 0.5 kg/pekan untuk melindungi massa otot
-              murni dan metabolisme tiroid.
-            </ThemedText>
-          </View>
-
           <PillButton
-            label="LANJUT: CEK RIWAYAT FISIK →"
+            label="Lanjut"
             disabled={!data.gender}
             onPress={() => router.push('/onboarding/health')}
           />
-          <ThemedText type="small" themeColor="textSecondary" style={styles.footerNote}>
-            Data biometrik terenkripsi aman & privat di RagaKu
-          </ThemedText>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -319,28 +282,9 @@ const styles = StyleSheet.create({
     fontSize: 40,
     lineHeight: 44,
   },
-  targetRegenBlock: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  targetRegenLabel: {
-    fontSize: 10,
-    letterSpacing: 0.3,
-    textAlign: 'right',
-  },
-  targetRegenValue: {
-    fontSize: 13,
-    textAlign: 'right',
-  },
   stepperRow: {},
   divider: {
     height: 1,
-  },
-  badgeInline: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
   },
   bmiRow: {
     flexDirection: 'row',
@@ -348,18 +292,6 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: Spacing.two,
     borderRadius: 12,
-  },
-  tipRow: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: Spacing.three,
-    borderRadius: 16,
-  },
-  tipText: {
-    flex: 1,
-  },
-  footerNote: {
-    textAlign: 'center',
   },
   listGap: {
     gap: Spacing.two,
