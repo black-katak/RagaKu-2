@@ -66,8 +66,8 @@ export default function RootLayout() {
  * guard-nya jadi false (lihat StackRouter.getStateForRouteNamesChange), lalu `index`
  * sendiri memutuskan <Redirect> yang benar (src/app/index.tsx).
  *
- * `active-session.tsx`, `workout.tsx`, `exercise.tsx`, `vip.tsx` sengaja TIDAK
- * didaftarkan di grup mana pun (tech debt yang sudah ada, bukan bagian perubahan ini).
+ * `active-session.tsx` sengaja TIDAK didaftarkan di grup mana pun (tech debt
+ * yang sudah ada, bukan bagian perubahan ini).
  *
  * PENTING: <Stack> baru dipasang setelah `ready` (sesi selesai dimuat). Memasang Stack
  * lebih awal dengan semua guard bernilai false (karena `ready` masih false) membuat
