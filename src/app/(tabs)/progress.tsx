@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,6 +25,8 @@ export default function ProgressScreen() {
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
   const [weight, setWeight] = useState(profile.weightKg);
   const [waist, setWaist] = useState(80);
+  const [showSavedBanner, setShowSavedBanner] = useState(false);
+  const hideBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setEntries(await storage.getProgress());
@@ -36,10 +38,19 @@ export default function ProgressScreen() {
     }, [load]),
   );
 
+  useEffect(() => {
+    return () => {
+      if (hideBannerTimer.current) clearTimeout(hideBannerTimer.current);
+    };
+  }, []);
+
   const logEntry = async () => {
     const date = new Date().toISOString().slice(0, 10);
     const next = await storage.addProgress({ date, weightKg: weight, waistCm: waist });
     setEntries(next);
+    setShowSavedBanner(true);
+    if (hideBannerTimer.current) clearTimeout(hideBannerTimer.current);
+    hideBannerTimer.current = setTimeout(() => setShowSavedBanner(false), 4000);
   };
 
   const weightSeries = entries.map((e) => e.weightKg);
@@ -59,11 +70,20 @@ export default function ProgressScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
           <View>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
-              PELACAKAN PROGRES
+            <ThemedText style={styles.title}>PROGRES</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
+              Catat berat dan lingkar pinggang. Tren muncul setelah ada catatan.
             </ThemedText>
-            <ThemedText style={styles.title}>Progres</ThemedText>
           </View>
+
+          {showSavedBanner ? (
+            <View style={[styles.savedBanner, { backgroundColor: '#134E4A' }]}>
+              <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
+              <ThemedText type="small" style={styles.savedBannerText}>
+                Catatan berat hari ini tersimpan. Tren mingguan muncul setelah tiga catatan.
+              </ThemedText>
+            </View>
+          ) : null}
 
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
@@ -94,9 +114,12 @@ export default function ProgressScreen() {
           {entries.length === 0 ? (
             <View style={[styles.emptyBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
               <Ionicons name="trending-up-outline" size={18} color={theme.textSecondary} />
-              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-                Belum ada catatan. Simpan berat badanmu untuk mulai melihat tren.
-              </ThemedText>
+              <View style={styles.emptyText}>
+                <ThemedText type="smallBold">Belum ada catatan</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Simpan berat badanmu hari ini untuk mulai melihat tren mingguan.
+                </ThemedText>
+              </View>
             </View>
           ) : (
             <>
@@ -144,7 +167,7 @@ export default function ProgressScreen() {
           )}
 
 
-          <Disclaimer text="Grafik tren bersifat informatif. Perubahan berat yang drastis sebaiknya dibahas dengan tenaga kesehatan." />
+          <Disclaimer text="Grafik bersifat informatif. Perubahan berat drastis sebaiknya dibahas dengan tenaga kesehatan." />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -162,8 +185,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     gap: Spacing.three,
   },
-  eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
-  title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
+  title: { fontFamily: FontFamily.headingExtraBold, fontSize: 36, lineHeight: 40 },
+  subheading: { marginTop: Spacing.one },
   section: { gap: Spacing.three },
   sectionLabel: { letterSpacing: 0.4 },
   divider: { height: 1 },
@@ -175,5 +198,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  emptyText: { flex: 1 },
+  emptyText: { flex: 1, gap: 2 },
+  savedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: Spacing.three,
+    borderRadius: 12,
+  },
+  savedBannerText: { flex: 1, color: '#FFFFFF' },
 });

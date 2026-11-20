@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -28,18 +28,58 @@ const SCREENING_QUESTIONS: { key: ScreeningKey; label: string }[] = [
   { key: 'hasEatingDisorderHistory', label: 'Pernah mengalami gangguan makan' },
 ];
 
+type ErrorState = {
+  kind: 'rate_limit' | 'screening_blocked' | 'ai_failed';
+  label: string;
+  heading: string;
+  body: string;
+  color: string;
+};
+
+const ERROR_STATES: Record<ErrorState['kind'], ErrorState> = {
+  rate_limit: {
+    kind: 'rate_limit',
+    label: 'TERLALU BANYAK PERMINTAAN',
+    heading: 'Tunggu beberapa menit',
+    body: 'Permintaan rencana hari ini sudah terlalu sering. Rencana yang sudah dibuat tetap tersimpan dan bisa dibuka lagi.',
+    color: '#B45309',
+  },
+  screening_blocked: {
+    kind: 'screening_blocked',
+    label: 'RENCANA TIDAK DIBUAT',
+    heading: 'Ada kondisi yang perlu dibahas dulu',
+    body: 'Kamu mencentang kondisi kesehatan di penyaringan. Bahas dulu dengan tenaga kesehatan sebelum mengikuti rencana latihan.',
+    color: '#B45309',
+  },
+  ai_failed: {
+    kind: 'ai_failed',
+    label: 'RENCANA GAGAL DIBUAT',
+    heading: 'Layanan AI tidak merespons',
+    body: 'Rencana hari ini belum bisa dibuat. Coba lagi sebentar, atau susun latihan sendiri lewat tab Progres.',
+    color: '#B91C1C',
+  },
+};
+
 export default function RencanaScreen() {
   const theme = useTheme();
   const { profile, screening, updateScreening } = useProfile();
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorState | null>(null);
+  const [connError, setConnError] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [screeningY, setScreeningY] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
 
   const blocked = screeningBlocked(screening);
 
+  const scrollToScreening = () => {
+    scrollRef.current?.scrollTo({ y: Math.max(screeningY - 16, 0), animated: true });
+  };
+
   const generate = async () => {
     setError(null);
+    setConnError(null);
     setLoading(true);
     setPlan(null);
     try {
@@ -48,16 +88,16 @@ export default function RencanaScreen() {
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.status === 429) {
-          setError('Model sedang sibuk (rate limit). Coba lagi sebentar lagi.');
+          setError(ERROR_STATES.rate_limit);
         } else if (e.code === 'screening_blocked') {
-          setError(e.message);
+          setError(ERROR_STATES.screening_blocked);
         } else if (e.status === 0) {
-          setError('Tidak dapat terhubung ke server. Periksa koneksi atau alamat API.');
+          setConnError('Tidak dapat terhubung ke server. Periksa koneksi atau alamat API.');
         } else {
-          setError(e.message);
+          setError(ERROR_STATES.ai_failed);
         }
       } else {
-        setError('Terjadi kesalahan tak terduga.');
+        setError(ERROR_STATES.ai_failed);
       }
     } finally {
       setLoading(false);
@@ -68,44 +108,87 @@ export default function RencanaScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
           <View>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
-              RENCANA HARIAN
+            <ThemedText style={styles.title}>RENCANA</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
+              Tanya apa saja soal latihan dan makanmu hari ini.
             </ThemedText>
-            <ThemedText style={styles.title}>Olahraga & Makan</ThemedText>
           </View>
 
           {/* Section 7: health screening gate */}
-          <Card style={styles.section}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              PENYARINGAN KESEHATAN
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Demi keamanan, centang jika salah satu kondisi berikut berlaku. Jika ada yang dicentang,
-              rencana otomatis tidak dibuat.
-            </ThemedText>
-            {SCREENING_QUESTIONS.map((q) => {
-              const checked = screening[q.key];
-              return (
-                <Checkbox
-                  key={q.key}
-                  label={q.label}
-                  checked={checked}
-                  onToggle={() => updateScreening({ [q.key]: !checked } as never)}
-                />
-              );
-            })}
-          </Card>
+          <View onLayout={(e) => setScreeningY(e.nativeEvent.layout.y)}>
+            <Card style={styles.section}>
+              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+                PENYARINGAN KESEHATAN
+              </ThemedText>
+              <ThemedText type="small">
+                Sebelum aku susun rencana, cek dulu kondisimu. Centang yang berlaku. Jika ada, rencana
+                tidak dibuat dan sebaiknya konsultasi ke tenaga kesehatan.
+              </ThemedText>
+              {SCREENING_QUESTIONS.map((q) => {
+                const checked = screening[q.key];
+                return (
+                  <Checkbox
+                    key={q.key}
+                    label={q.label}
+                    checked={checked}
+                    onToggle={() => updateScreening({ [q.key]: !checked } as never)}
+                  />
+                );
+              })}
+            </Card>
+          </View>
 
           {blocked ? (
-            <View style={[styles.blockBox, { backgroundColor: '#FFF7ED', borderColor: theme.warning }]}>
-              <Ionicons name="medkit-outline" size={18} color={theme.warning} />
-              <ThemedText type="small" style={{ color: theme.warning, flex: 1 }}>
-                Berdasarkan jawaban penyaringan, rencana otomatis tidak dibuat. Silakan konsultasi
-                dengan tenaga kesehatan sebelum memulai program.
+            <View style={[styles.blockBox, { backgroundColor: '#FFF7ED', borderColor: '#B45309' }]}>
+              <ThemedText type="smallBold" style={{ color: '#B45309', letterSpacing: 0.4 }}>
+                {ERROR_STATES.screening_blocked.label}
               </ThemedText>
+              <ThemedText type="smallBold" style={styles.stateHeading}>
+                {ERROR_STATES.screening_blocked.heading}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {ERROR_STATES.screening_blocked.body}
+              </ThemedText>
+              <PillButton
+                label="Ubah jawaban penyaringan"
+                variant="outline"
+                onPress={scrollToScreening}
+                style={styles.stateButton}
+              />
+            </View>
+          ) : loading ? (
+            <View style={[styles.loadingBox, { backgroundColor: theme.backgroundSelected, borderColor: theme.border }]}>
+              <ThemedText type="smallBold" themeColor="primary" style={styles.sectionLabel}>
+                SEDANG MENYUSUN
+              </ThemedText>
+              <ThemedText type="smallBold" style={styles.stateHeading}>
+                Menyusun rencana hari ini
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Menghitung target kalori dan menyusun latihan. Biasanya di bawah 10 detik.
+              </ThemedText>
+              <PillButton label="Menyusun..." loading style={styles.stateButton} />
+            </View>
+          ) : error ? (
+            <View style={[styles.errorBox, { backgroundColor: theme.backgroundElement, borderColor: error.color }]}>
+              <ThemedText type="smallBold" style={{ color: error.color, letterSpacing: 0.4 }}>
+                {error.label}
+              </ThemedText>
+              <ThemedText type="smallBold" style={styles.stateHeading}>
+                {error.heading}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {error.body}
+              </ThemedText>
+              <PillButton
+                label={error.kind === 'rate_limit' ? 'Coba lagi nanti' : 'Coba lagi'}
+                onPress={generate}
+                style={styles.stateButton}
+              />
             </View>
           ) : (
             <PillButton
@@ -115,18 +198,18 @@ export default function RencanaScreen() {
             />
           )}
 
-          {error ? (
+          {connError ? (
             <View style={[styles.errorBox, { backgroundColor: theme.background, borderColor: theme.warning }]}>
               <Ionicons name="warning-outline" size={16} color={theme.warning} />
               <ThemedText type="small" style={{ color: theme.warning, flex: 1 }}>
-                {error}
+                {connError}
               </ThemedText>
             </View>
           ) : null}
 
           {plan ? <PlanView plan={plan} /> : null}
 
-          <Disclaimer text="Rencana ini dihasilkan AI berdasarkan target kalori yang dihitung aplikasi. Bukan saran medis atau gizi profesional." />
+          <Disclaimer text="Rencana dibuat AI dari target kalori yang dihitung aplikasi. Bukan saran medis atau gizi profesional." />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -272,7 +355,8 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
-  title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
+  title: { fontFamily: FontFamily.headingExtraBold, fontSize: 36, lineHeight: 40 },
+  subheading: { marginTop: Spacing.one },
   section: { gap: Spacing.three },
   sectionLabel: { letterSpacing: 0.4 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -286,19 +370,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   blockBox: {
-    flexDirection: 'row',
-    gap: 8,
+    gap: 6,
+    padding: Spacing.three,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  loadingBox: {
+    gap: 6,
     padding: Spacing.three,
     borderRadius: 16,
     borderWidth: 1,
   },
   errorBox: {
-    flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     padding: Spacing.three,
     borderRadius: 12,
     borderWidth: 1,
   },
+  stateHeading: { fontSize: 16 },
+  stateButton: { marginTop: Spacing.two, alignSelf: 'flex-start' },
   cachedBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   targetRow: { flexDirection: 'row', gap: Spacing.four },
   targetValue: { fontFamily: FontFamily.headingBold, fontSize: 24 },
