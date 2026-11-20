@@ -14,10 +14,11 @@ import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
+// Web nav = top bar (logo left, links right), per Figma "RagaKu v2 — Web" frames.
+// Native app keeps the bottom NativeTabs bar (see app-tabs.tsx) — this file is .web-only.
 export default function AppTabs() {
   return (
     <Tabs>
-      <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="beranda" href="/beranda" asChild>
@@ -34,6 +35,7 @@ export default function AppTabs() {
           </TabTrigger>
         </CustomTabList>
       </TabList>
+      <TabSlot style={{ flex: 1 }} />
     </Tabs>
   );
 }
@@ -64,55 +66,92 @@ export function TabButton({
         size={18}
         color={isFocused ? colors.primary : colors.textSecondary}
       />
-      <ThemedText type="small" themeColor={isFocused ? 'primary' : 'textSecondary'}>
+      <ThemedText
+        type={isFocused ? 'smallBold' : 'small'}
+        themeColor={isFocused ? 'primary' : 'textSecondary'}>
         {children}
       </ThemedText>
     </Pressable>
   );
 }
 
+// Top bar per web spec: logo left, nav links right, thin bottom border, full width.
 export function CustomTabList(props: TabListProps) {
-  return (
-    <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          RagaKu
-        </ThemedText>
+  const scheme = useColorScheme();
+  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
-        {props.children}
-      </ThemedView>
-    </View>
+  return (
+    <ThemedView type="backgroundElement" style={[styles.bar, { borderBottomColor: colors.border }]}>
+      <View style={styles.inner}>
+        <View style={styles.logoRow}>
+          <View style={[styles.logoMark, { backgroundColor: colors.primary }]}>
+            <MaterialCommunityIcons name="pulse" size={16} color="#FFFFFF" />
+          </View>
+          <ThemedText type="smallBold" style={styles.logoWord}>
+            RAGAKU
+          </ThemedText>
+          <ThemedText type="small" themeColor="primary" style={styles.logoSuper}>
+            AI
+          </ThemedText>
+        </View>
+
+        <View {...props} style={styles.links}>
+          {props.children}
+        </View>
+      </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  tabListContainer: {
-    position: 'absolute',
-    bottom: 0,
+  bar: {
     width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
+    borderBottomWidth: 1,
     alignItems: 'center',
-    flexDirection: 'row',
   },
-  innerContainer: {
-    paddingVertical: Spacing.two,
+  inner: {
+    width: '100%',
+    maxWidth: MaxContentWidth + Spacing.four * 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.four,
-    borderRadius: Spacing.five,
+    paddingVertical: Spacing.three,
+  },
+  logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.four,
-    maxWidth: MaxContentWidth,
+    gap: 6,
   },
-  brandText: {
-    marginRight: 'auto',
+  logoMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoWord: {
+    fontSize: 15,
+    letterSpacing: 0.3,
+  },
+  logoSuper: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: -2,
+    marginTop: -6,
+  },
+  links: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.five,
   },
   pressed: {
     opacity: 0.7,
   },
   tabItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 6,
+    paddingVertical: Spacing.two,
   },
 });
