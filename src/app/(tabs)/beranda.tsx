@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Disclaimer } from '@/components/disclaimer';
@@ -10,7 +10,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
-import { NumberStepper } from '@/components/ui/number-stepper';
 import { PillButton } from '@/components/ui/pill-button';
 import { Segmented } from '@/components/ui/segmented';
 import { BottomTabInset, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -22,7 +21,6 @@ import {
   idealWeightRange,
   type ActivityLevel,
   type BmiStandard,
-  type Gender,
   type Goal,
 } from '@/lib/health';
 
@@ -38,6 +36,18 @@ const GOAL_LABELS: { value: Goal; label: string }[] = [
   { value: 'maintain', label: 'Jaga berat' },
   { value: 'gain', label: 'Naikkan berat' },
 ];
+
+// Belum ada kalkulator angka-lain terpisah (di luar scope restructuring ini) —
+// link ini sekadar menjelaskan ke user kalau fiturnya belum tersedia.
+function showAlternativeCalculatorNotice() {
+  const message = 'Kalkulator dengan angka lain belum tersedia. Untuk sekarang, ubah tinggi/berat lewat Profil.';
+  if (Platform.OS === 'web') {
+    // Alert.alert adalah no-op di react-native-web.
+    window.alert(message);
+  } else {
+    Alert.alert('Hitung angka lain', message);
+  }
+}
 
 export default function BerandaScreen() {
   const theme = useTheme();
@@ -72,17 +82,17 @@ export default function BerandaScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
           <View>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
-              RAGAKU
+            <ThemedText style={styles.title}>KONDISI TUBUHMU</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Dihitung dari data profilmu.
             </ThemedText>
-            <ThemedText style={styles.title}>Kondisi Tubuhmu</ThemedText>
           </View>
 
           {/* F2: BMI result card */}
           <Card style={styles.bmiCard}>
             <View style={styles.rowBetween}>
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                INDEKS MASSA TUBUH (BMI)
+                INDEKS MASSA TUBUH
               </ThemedText>
               <Segmented<BmiStandard>
                 options={[
@@ -106,13 +116,27 @@ export default function BerandaScreen() {
               <ThemedText type="small" themeColor="textSecondary">
                 Rentang berat ideal:{' '}
                 <ThemedText type="smallBold" themeColor="primary">
-                  {ideal.minKg}–{ideal.maxKg} kg
+                  {ideal.minKg} sampai {ideal.maxKg} kg
                 </ThemedText>
               </ThemedText>
             </View>
-            <ThemedText type="small" themeColor="textMuted">
-              BMI = berat ÷ (tinggi dalam meter)². Standar{' '}
-              {profile.bmiStandard === 'asia_pacific' ? 'Asia-Pasifik (normal 18,5–22,9)' : 'WHO (normal 18,5–24,9)'}.
+            <ThemedText type="small" themeColor="primaryDark">
+              Memakai tinggi {profile.heightCm} cm dan berat {profile.weightKg} kg dari profilmu. Berat
+              berubah?{' '}
+              <ThemedText
+                type="smallBold"
+                themeColor="primary"
+                onPress={() => router.push('/profil')}>
+                Perbarui di Profil
+              </ThemedText>
+              , atau{' '}
+              <ThemedText
+                type="smallBold"
+                themeColor="textSecondary"
+                onPress={showAlternativeCalculatorNotice}>
+                hitung dengan angka lain
+              </ThemedText>{' '}
+              di bawah.
             </ThemedText>
           </Card>
 
@@ -133,56 +157,9 @@ export default function BerandaScreen() {
             ) : null}
           </Card>
 
-          {/* F1: Profile editor */}
-          <Card style={styles.section}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              PROFIL
-            </ThemedText>
-
-            <ThemedText type="small" themeColor="textSecondary">
-              Jenis kelamin
-            </ThemedText>
-            <Segmented<Gender>
-              options={[
-                { label: 'Pria', value: 'male' },
-                { label: 'Wanita', value: 'female' },
-              ]}
-              value={profile.gender}
-              onChange={(gender) => updateProfile({ gender })}
-            />
-
-            <View style={styles.ageRow}>
-              <ThemedText type="default">Usia</ThemedText>
-              <NumberStepper
-                label=""
-                value={profile.age}
-                unit="th"
-                min={18}
-                max={80}
-                onChange={(age) => updateProfile({ age })}
-              />
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <NumberStepper
-              label="Tinggi badan"
-              value={profile.heightCm}
-              unit="cm"
-              min={120}
-              max={220}
-              onChange={(heightCm) => updateProfile({ heightCm })}
-            />
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <NumberStepper
-              label="Berat badan"
-              value={profile.weightKg}
-              unit="kg"
-              min={30}
-              max={250}
-              step={0.5}
-              onChange={(weightKg) => updateProfile({ weightKg })}
-            />
-          </Card>
+          <ThemedText type="small" themeColor="textSecondary">
+            Estimasi edukatif untuk populasi umum, bukan saran medis individual.
+          </ThemedText>
 
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
@@ -213,13 +190,13 @@ export default function BerandaScreen() {
               ))}
             </View>
 
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              CATATAN POLA MAKAN (OPSIONAL)
+            <ThemedText type="smallBold" themeColor="text">
+              Catatan pola makan (opsional)
             </ThemedText>
             <TextInput
               value={profile.dietNotes}
               onChangeText={(dietNotes) => updateProfile({ dietNotes: dietNotes.slice(0, 200) })}
-              placeholder="Mis. vegetarian, alergi kacang, jadwal puasa..."
+              placeholder="Contoh: vegetarian, alergi kacang, puasa"
               placeholderTextColor={theme.textMuted}
               multiline
               style={[
@@ -232,7 +209,7 @@ export default function BerandaScreen() {
             </ThemedText>
           </Card>
 
-          <PillButton label="Buat rencana hari ini →" onPress={() => router.push('/rencana')} />
+          <PillButton label="Buat rencana hari ini" onPress={() => router.push('/rencana')} />
 
           <Disclaimer />
         </ScrollView>
@@ -279,8 +256,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     gap: Spacing.three,
   },
-  eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
-  title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
+  title: { fontFamily: FontFamily.headingExtraBold, fontSize: 36, lineHeight: 40 },
   bmiCard: { gap: Spacing.three },
   section: { gap: Spacing.three },
   sectionLabel: { letterSpacing: 0.4 },
@@ -292,8 +268,6 @@ const styles = StyleSheet.create({
   calorieRow: { flexDirection: 'row', gap: Spacing.two },
   calorieStat: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: Spacing.three, borderRadius: 12 },
   calorieLabel: { fontSize: 11, letterSpacing: 0.3 },
-  ageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  divider: { height: 1 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   notesInput: {
     borderWidth: 1,

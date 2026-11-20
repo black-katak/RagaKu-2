@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Disclaimer } from '@/components/disclaimer';
@@ -92,6 +92,12 @@ export default function UkuranScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
+          <Pressable onPress={() => router.push('/profil')} style={styles.backRow} hitSlop={8}>
+            <Ionicons name="chevron-back" size={18} color={theme.textSecondary} />
+            <ThemedText type="small" themeColor="textSecondary">
+              Kembali ke Profil
+            </ThemedText>
+          </Pressable>
           <View>
             <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
               PENGUKURAN TUBUH
@@ -239,6 +245,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
   section: { gap: Spacing.three },
   sectionLabel: { letterSpacing: 0.4 },

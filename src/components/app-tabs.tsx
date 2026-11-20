@@ -22,11 +22,6 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="list.bullet.clipboard.fill" md="assignment" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="ukuran">
-        <NativeTabs.Trigger.Label>Ukuran</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="figure.arms.open" md="straighten" />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="progress">
         <NativeTabs.Trigger.Label>Progres</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="chart.line.uptrend.xyaxis" md="show_chart" />

@@ -26,9 +26,6 @@ export default function AppTabs() {
           <TabTrigger name="rencana" href="/rencana" asChild>
             <TabButton icon="assignment">Rencana</TabButton>
           </TabTrigger>
-          <TabTrigger name="ukuran" href="/ukuran" asChild>
-            <TabButton icon="straighten">Ukuran</TabButton>
-          </TabTrigger>
           <TabTrigger name="progress" href="/progress" asChild>
             <TabButton icon="show_chart">Progres</TabButton>
           </TabTrigger>

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,36 +11,92 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { NumberStepper } from '@/components/ui/number-stepper';
 import { PillButton } from '@/components/ui/pill-button';
-import { StatTile } from '@/components/ui/stat-tile';
+import { Segmented } from '@/components/ui/segmented';
 import { BottomTabInset, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { auth } from '@/lib/auth';
-import type { ActivityLevel, Goal } from '@/lib/health';
+import type { Gender } from '@/lib/health';
+import type { MeasurementRecord } from '@/lib/model';
 import { storage } from '@/lib/storage';
 
-const GOAL_LABELS: Record<Goal, string> = {
-  lose: 'Turunkan berat',
-  maintain: 'Jaga berat',
-  gain: 'Naikkan berat',
-};
-
-const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
-  sedentary: 'Jarang gerak',
-  light: 'Ringan',
-  active: 'Aktif',
-  very_active: 'Sangat aktif',
-};
+const DEFAULT_NECK_CM = 38;
 
 export default function ProfilScreen() {
   const theme = useTheme();
   const { session, signOut } = useAuth();
-  const { profile, clearAll } = useProfile();
+  const { profile, updateProfile, clearAll } = useProfile();
 
   const [signOutVisible, setSignOutVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // DATA DIRI — diedit lokal, baru ditulis ke profile context saat "Simpan perubahan"
+  // (spec profil.md menuntut tombol simpan terpisah + banner konfirmasi).
+  const [gender, setGender] = useState<Gender>(profile.gender);
+  const [age, setAge] = useState(profile.age);
+  const [heightCm, setHeightCm] = useState(profile.heightCm);
+  const [weightKg, setWeightKg] = useState(profile.weightKg);
+  const [saved, setSaved] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setGender(profile.gender);
+    setAge(profile.age);
+    setHeightCm(profile.heightCm);
+    setWeightKg(profile.weightKg);
+  }, [profile.gender, profile.age, profile.heightCm, profile.weightKg]);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  const dismissBanner = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setSaved(false);
+  };
+
+  const handleSaveProfile = () => {
+    updateProfile({ gender, age, heightCm, weightKg });
+    setSaved(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setSaved(false), 4000);
+  };
+
+  // UKURAN TUBUH — lingkar leher dipakai untuk estimasi lemak tubuh (US Navy),
+  // disimpan di record pengukuran yang sama dipakai tab Ukuran (lihat ukuran.tsx).
+  const [latestMeasurement, setLatestMeasurement] = useState<MeasurementRecord | null>(null);
+  const [neckCm, setNeckCm] = useState(DEFAULT_NECK_CM);
+
+  const loadMeasurement = useCallback(async () => {
+    const list = await storage.getMeasurements();
+    const record = list.length ? list[list.length - 1] : null;
+    setLatestMeasurement(record);
+    setNeckCm(record?.neckCm ?? DEFAULT_NECK_CM);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadMeasurement();
+    }, [loadMeasurement]),
+  );
+
+  const handleNeckChange = async (value: number) => {
+    setNeckCm(value);
+    const date = new Date().toISOString().slice(0, 10);
+    const base = latestMeasurement?.date === date ? latestMeasurement : latestMeasurement ?? {};
+    const next = await storage.upsertMeasurement({
+      ...base,
+      date,
+      neckCm: value,
+      source: 'manual',
+    });
+    setLatestMeasurement(next[next.length - 1]);
+  };
 
   const handleSignOut = async () => {
     setSignOutVisible(false);
@@ -71,11 +128,19 @@ export default function ProfilScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
           <View>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
-              AKUN
+            <ThemedText style={styles.title}>PROFIL</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Ubah data dirimu. Perhitungan kalori ikut menyesuaikan.
             </ThemedText>
-            <ThemedText style={styles.title}>Profil</ThemedText>
           </View>
+
+          {saved ? (
+            <View style={[styles.banner, { backgroundColor: theme.backgroundSelected }]}>
+              <ThemedText type="small" themeColor="primaryDark">
+                Perubahan profil tersimpan. Target kalori sudah dihitung ulang.
+              </ThemedText>
+            </View>
+          ) : null}
 
           <Card style={styles.identityCard}>
             <Ionicons name="person-circle" size={56} color={theme.primary} />
@@ -89,34 +154,116 @@ export default function ProfilScreen() {
             </View>
           </Card>
 
+          {/* DATA DIRI */}
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              RINGKASAN PROFIL
+              DATA DIRI
             </ThemedText>
-            <View style={styles.statRow}>
-              <StatTile label="Tinggi" value={`${profile.heightCm}`} unit="cm" />
-              <StatTile label="Berat" value={`${profile.weightKg}`} unit="kg" />
-            </View>
-            <View style={styles.statRow}>
-              <StatTile label="Usia" value={`${profile.age}`} unit="th" />
-              <StatTile label="Target" value={GOAL_LABELS[profile.goal]} />
-            </View>
+
+            <Segmented<Gender>
+              options={[
+                { label: 'Pria', value: 'male' },
+                { label: 'Wanita', value: 'female' },
+              ]}
+              value={gender}
+              onChange={(value) => {
+                dismissBanner();
+                setGender(value);
+              }}
+            />
+
+            <NumberStepper
+              label="Usia"
+              value={age}
+              unit="th"
+              min={18}
+              max={80}
+              onChange={(value) => {
+                dismissBanner();
+                setAge(value);
+              }}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper
+              label="Tinggi badan"
+              value={heightCm}
+              unit="cm"
+              min={120}
+              max={220}
+              onChange={(value) => {
+                dismissBanner();
+                setHeightCm(value);
+              }}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper
+              label="Berat saat ini"
+              value={weightKg}
+              unit="kg"
+              min={30}
+              max={250}
+              step={0.5}
+              onChange={(value) => {
+                dismissBanner();
+                setWeightKg(value);
+              }}
+            />
+
+            <PillButton label="Simpan perubahan" onPress={handleSaveProfile} />
+          </Card>
+
+          {/* UKURAN TUBUH */}
+          <Card style={styles.section}>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+              UKURAN TUBUH
+            </ThemedText>
+
+            <NumberStepper
+              label="Lingkar leher"
+              value={neckCm}
+              unit="cm"
+              min={20}
+              max={60}
+              step={0.5}
+              onChange={handleNeckChange}
+            />
             <ThemedText type="small" themeColor="textSecondary">
-              Level aktivitas: {ACTIVITY_LABELS[profile.activityLevel]}. Ubah data ini di tab
-              Beranda.
+              Dipakai untuk estimasi lemak tubuh.
+            </ThemedText>
+
+            <PillButton
+              label="Ukur dari foto"
+              variant="outline"
+              onPress={() => router.push('/measurement')}
+            />
+            <ThemedText type="small" themeColor="primaryDark">
+              Foto dikirim lewat koneksi aman, diproses, lalu dihapus dari server. Hanya angka ukuran
+              yang disimpan.
+            </ThemedText>
+
+            <ThemedText
+              type="smallBold"
+              themeColor="primary"
+              onPress={() => router.push('/ukuran')}>
+              Lihat ukuran manual & indikator lanjutan (WHtR, WHR, lemak tubuh) →
             </ThemedText>
           </Card>
 
-          <PillButton
-            label="Keluar dari akun"
-            variant="outline"
-            onPress={() => setSignOutVisible(true)}
-          />
-          <PillButton
-            label="Hapus semua data saya"
-            variant="outline"
-            onPress={() => setDeleteVisible(true)}
-          />
+          <Card style={styles.section}>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+              AKUN
+            </ThemedText>
+            <PillButton
+              label="Keluar dari akun"
+              variant="outline"
+              onPress={() => setSignOutVisible(true)}
+            />
+            <PillButton
+              label="Hapus semua data saya"
+              variant="outline"
+              onPress={() => setDeleteVisible(true)}
+            />
+          </Card>
 
           <Disclaimer text="Data profil dan progres disimpan di perangkat ini. Menghapus semua data tidak dapat dibatalkan." />
         </ScrollView>
@@ -132,9 +279,9 @@ export default function ProfilScreen() {
       />
       <ConfirmDialog
         visible={deleteVisible}
-        title="Hapus semua data?"
-        message="Semua profil, ukuran, progres, dan akun akan dihapus dari perangkat ini. Tindakan ini tidak dapat dibatalkan."
-        confirmLabel={deleting ? 'Menghapus…' : 'Hapus'}
+        title="HAPUS SEMUA DATA?"
+        message="Profil, catatan berat, ukuran tubuh, dan hasil pengukuran foto akan dihapus permanen dari perangkat ini. Data yang sudah dihapus tidak bisa dikembalikan."
+        confirmLabel={deleting ? 'Menghapus…' : 'Hapus semua data'}
         destructive
         onConfirm={handleDeleteAll}
         onCancel={() => setDeleteVisible(false)}
@@ -154,8 +301,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     gap: Spacing.three,
   },
-  eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
-  title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
+  title: { fontFamily: FontFamily.headingExtraBold, fontSize: 36, lineHeight: 40 },
+  banner: { padding: Spacing.three, borderRadius: 12 },
   identityCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -167,5 +314,5 @@ const styles = StyleSheet.create({
   },
   section: { gap: Spacing.three },
   sectionLabel: { letterSpacing: 0.4 },
-  statRow: { flexDirection: 'row', gap: Spacing.two },
+  divider: { height: 1 },
 });
