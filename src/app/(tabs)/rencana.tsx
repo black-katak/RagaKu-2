@@ -648,21 +648,24 @@ function Checkbox({
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.checkboxRow} onTouchEnd={onToggle}>
-      <Pressable onPress={onToggle} hitSlop={8}>
-        <View
-          style={[
-            styles.checkbox,
-            {
-              backgroundColor: checked ? theme.warning : 'transparent',
-              borderColor: checked ? theme.warning : theme.border,
-            },
-          ]}>
-          {checked ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
-        </View>
-      </Pressable>
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={label}
+      style={styles.checkboxRow}>
+      <View
+        style={[
+          styles.checkbox,
+          {
+            backgroundColor: checked ? theme.warning : 'transparent',
+            borderColor: checked ? theme.warning : theme.border,
+          },
+        ]}>
+        {checked ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+      </View>
       <ThemedText type="small">{label}</ThemedText>
-    </View>
+    </Pressable>
   );
 }
 
@@ -698,7 +701,7 @@ const styles = StyleSheet.create({
   stateHeading: { fontSize: 16 },
   stateButton: { marginTop: Spacing.two, alignSelf: 'flex-start' },
 
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 44, paddingVertical: 6 },
   checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   cachedBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   targetRow: { flexDirection: 'row', gap: Spacing.four },
