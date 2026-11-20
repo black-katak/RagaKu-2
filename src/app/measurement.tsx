@@ -3,7 +3,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useProfile } from '@/components/profile-context';
@@ -189,22 +189,47 @@ export default function MeasurementScreen() {
               </ThemedText>
             </Pressable>
 
-            <PillButton
-              label="Buka kamera"
-              disabled={!consented}
-              onPress={async () => {
-                if (!permission?.granted) {
-                  const res = await requestPermission();
-                  if (!res.granted) {
-                    setError('Izin kamera diperlukan. Kamu masih bisa memilih foto dari galeri.');
+            {/* web_ukur_dari_foto.md: kamera/galeri butuh hardware HP, jadi web */}
+            {/* tampilkan notice "lanjutkan di aplikasi ponsel" sebagai ganti tombol. */}
+            {Platform.OS === 'web' ? (
+              <>
+                <View
+                  style={[
+                    styles.webNoticeBox,
+                    { backgroundColor: theme.backgroundSelected, borderColor: theme.border },
+                  ]}>
+                  <ThemedText type="smallBold" style={styles.webNoticeTitle}>
+                    Lanjutkan di aplikasi ponsel
+                  </ThemedText>
+                  <ThemedText type="small" style={styles.webNoticeText}>
+                    Pengukuran memakai kamera, jadi langkah ini hanya tersedia di ponsel. Hasilnya
+                    otomatis muncul di sini setelah tersimpan.
+                  </ThemedText>
+                </View>
+                <Pressable onPress={() => router.back()} hitSlop={10} style={styles.cancelRow}>
+                  <ThemedText type="smallBold">Tutup</ThemedText>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <PillButton
+                  label="Buka kamera"
+                  disabled={!consented}
+                  onPress={async () => {
+                    if (!permission?.granted) {
+                      const res = await requestPermission();
+                      if (!res.granted) {
+                        setError('Izin kamera diperlukan. Kamu masih bisa memilih foto dari galeri.');
+                        setPhase('capture');
+                        return;
+                      }
+                    }
                     setPhase('capture');
-                    return;
-                  }
-                }
-                setPhase('capture');
-              }}
-            />
-            <PillButton label="Pilih dari galeri" variant="outline" onPress={pickFromLibrary} />
+                  }}
+                />
+                <PillButton label="Pilih dari galeri" variant="outline" onPress={pickFromLibrary} />
+              </>
+            )}
           </ScrollView>
         </SafeAreaView>
       </ThemedView>
@@ -347,4 +372,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   cancelRow: { alignItems: 'center', paddingVertical: Spacing.two },
+  webNoticeBox: { gap: Spacing.one, padding: Spacing.three, borderRadius: 12, borderWidth: 1 },
+  webNoticeTitle: { color: '#134E4A' },
+  webNoticeText: { color: '#134E4A' },
 });

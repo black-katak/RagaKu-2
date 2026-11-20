@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Disclaimer } from '@/components/disclaimer';
@@ -23,6 +31,12 @@ import {
   type BmiStandard,
   type Goal,
 } from '@/lib/health';
+
+// Breakpoint above which the web layout splits into 2 columns (left: BMI +
+// calorie result, right: activity/goal controls). Below it (incl. narrow
+// web / all mobile) everything stacks in a single column -- unchanged.
+const WEB_WIDE_BREAKPOINT = 880;
+const WEB_WIDE_MAX_WIDTH = 1040;
 
 const ACTIVITY_LABELS: { value: ActivityLevel; label: string }[] = [
   { value: 'sedentary', label: 'Jarang gerak' },
@@ -52,6 +66,8 @@ function showAlternativeCalculatorNotice() {
 export default function BerandaScreen() {
   const theme = useTheme();
   const { profile, updateProfile } = useProfile();
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= WEB_WIDE_BREAKPOINT;
 
   const bmi = useMemo(
     () => calculateBmi(profile.weightKg, profile.heightCm),
@@ -75,142 +91,175 @@ export default function BerandaScreen() {
   const bmiColor =
     category === 'Normal' ? theme.primary : category.includes('kurang') ? theme.accent : theme.warning;
 
+  const header = (
+    <View>
+      <ThemedText style={styles.title}>KONDISI TUBUHMU</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Dihitung dari data profilmu.
+      </ThemedText>
+    </View>
+  );
+
+  // Left column (web): hasil BMI + kebutuhan kalori -- data yang dihitung.
+  const resultColumn = (
+    <>
+      <Card style={styles.bmiCard}>
+        <View style={styles.rowBetween}>
+          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+            INDEKS MASSA TUBUH
+          </ThemedText>
+          <Segmented<BmiStandard>
+            options={[
+              { label: 'Asia-Pasifik', value: 'asia_pacific' },
+              { label: 'WHO', value: 'who' },
+            ]}
+            value={profile.bmiStandard}
+            onChange={(bmiStandard) => updateProfile({ bmiStandard })}
+          />
+        </View>
+        <View style={styles.bmiValueRow}>
+          <ThemedText style={[styles.bmiValue, { color: bmiColor }]}>{bmi.toFixed(1)}</ThemedText>
+          <View style={[styles.categoryBadge, { backgroundColor: theme.backgroundSelected }]}>
+            <ThemedText type="smallBold" style={{ color: bmiColor }}>
+              {category}
+            </ThemedText>
+          </View>
+        </View>
+        <View style={[styles.idealBox, { backgroundColor: theme.background }]}>
+          <Ionicons name="resize-outline" size={16} color={theme.primary} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Rentang berat ideal:{' '}
+            <ThemedText type="smallBold" themeColor="primary">
+              {ideal.minKg} sampai {ideal.maxKg} kg
+            </ThemedText>
+          </ThemedText>
+        </View>
+        <ThemedText type="small" themeColor="primaryDark">
+          Memakai tinggi {profile.heightCm} cm dan berat {profile.weightKg} kg dari profilmu. Berat
+          berubah?{' '}
+          <ThemedText
+            type="smallBold"
+            themeColor="primary"
+            onPress={() => router.push('/profil')}>
+            Perbarui di Profil
+          </ThemedText>
+          , atau{' '}
+          <ThemedText
+            type="smallBold"
+            themeColor="textSecondary"
+            onPress={showAlternativeCalculatorNotice}>
+            hitung dengan angka lain
+          </ThemedText>{' '}
+          di bawah.
+        </ThemedText>
+      </Card>
+
+      {/* Calorie summary (computed locally for display; backend is authoritative for the plan) */}
+      <Card style={styles.section}>
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+          PERKIRAAN KEBUTUHAN HARIAN
+        </ThemedText>
+        <View style={styles.calorieRow}>
+          <CalorieStat label="BMR" value={`${calories.bmr}`} unit="kkal" />
+          <CalorieStat label="TDEE" value={`${calories.tdee}`} unit="kkal" />
+          <CalorieStat label="Target" value={`${calories.targetCalories}`} unit="kkal" highlight />
+        </View>
+        {calories.floorApplied ? (
+          <ThemedText type="small" themeColor="warning">
+            Target dinaikkan ke batas aman {calories.safeFloor} kkal.
+          </ThemedText>
+        ) : null}
+      </Card>
+
+      <ThemedText type="small" themeColor="textSecondary">
+        Estimasi edukatif untuk populasi umum, bukan saran medis individual.
+      </ThemedText>
+    </>
+  );
+
+  // Right column (web): kontrol yang diisi user -- tingkat aktivitas, tujuan, catatan.
+  const controlsColumn = (
+    <>
+      <Card style={styles.section}>
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+          TINGKAT AKTIVITAS
+        </ThemedText>
+        <View style={styles.chipRow}>
+          {ACTIVITY_LABELS.map((a) => (
+            <Chip
+              key={a.value}
+              label={a.label}
+              selected={profile.activityLevel === a.value}
+              onPress={() => updateProfile({ activityLevel: a.value })}
+            />
+          ))}
+        </View>
+
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+          TUJUAN
+        </ThemedText>
+        <View style={styles.chipRow}>
+          {GOAL_LABELS.map((g) => (
+            <Chip
+              key={g.value}
+              label={g.label}
+              selected={profile.goal === g.value}
+              onPress={() => updateProfile({ goal: g.value })}
+            />
+          ))}
+        </View>
+
+        <ThemedText type="smallBold" themeColor="text">
+          Catatan pola makan (opsional)
+        </ThemedText>
+        <TextInput
+          value={profile.dietNotes}
+          onChangeText={(dietNotes) => updateProfile({ dietNotes: dietNotes.slice(0, 200) })}
+          placeholder="Contoh: vegetarian, alergi kacang, puasa"
+          placeholderTextColor={theme.textMuted}
+          multiline
+          style={[
+            styles.notesInput,
+            { borderColor: theme.border, color: theme.text, backgroundColor: theme.background },
+          ]}
+        />
+        <ThemedText type="small" themeColor="textMuted">
+          {(profile.dietNotes ?? '').length}/200
+        </ThemedText>
+      </Card>
+
+      <PillButton label="Buat rencana hari ini" onPress={() => router.push('/rencana')} />
+    </>
+  );
+
+  if (isWideWeb) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <ScrollView
+            contentContainerStyle={[styles.wideScrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
+            showsVerticalScrollIndicator={false}>
+            {header}
+            <View style={styles.webRow}>
+              <View style={styles.webColumn}>{resultColumn}</View>
+              <View style={styles.webColumn}>{controlsColumn}</View>
+            </View>
+            <Disclaimer />
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
-          <View>
-            <ThemedText style={styles.title}>KONDISI TUBUHMU</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Dihitung dari data profilmu.
-            </ThemedText>
-          </View>
-
-          {/* F2: BMI result card */}
-          <Card style={styles.bmiCard}>
-            <View style={styles.rowBetween}>
-              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                INDEKS MASSA TUBUH
-              </ThemedText>
-              <Segmented<BmiStandard>
-                options={[
-                  { label: 'Asia-Pasifik', value: 'asia_pacific' },
-                  { label: 'WHO', value: 'who' },
-                ]}
-                value={profile.bmiStandard}
-                onChange={(bmiStandard) => updateProfile({ bmiStandard })}
-              />
-            </View>
-            <View style={styles.bmiValueRow}>
-              <ThemedText style={[styles.bmiValue, { color: bmiColor }]}>{bmi.toFixed(1)}</ThemedText>
-              <View style={[styles.categoryBadge, { backgroundColor: theme.backgroundSelected }]}>
-                <ThemedText type="smallBold" style={{ color: bmiColor }}>
-                  {category}
-                </ThemedText>
-              </View>
-            </View>
-            <View style={[styles.idealBox, { backgroundColor: theme.background }]}>
-              <Ionicons name="resize-outline" size={16} color={theme.primary} />
-              <ThemedText type="small" themeColor="textSecondary">
-                Rentang berat ideal:{' '}
-                <ThemedText type="smallBold" themeColor="primary">
-                  {ideal.minKg} sampai {ideal.maxKg} kg
-                </ThemedText>
-              </ThemedText>
-            </View>
-            <ThemedText type="small" themeColor="primaryDark">
-              Memakai tinggi {profile.heightCm} cm dan berat {profile.weightKg} kg dari profilmu. Berat
-              berubah?{' '}
-              <ThemedText
-                type="smallBold"
-                themeColor="primary"
-                onPress={() => router.push('/profil')}>
-                Perbarui di Profil
-              </ThemedText>
-              , atau{' '}
-              <ThemedText
-                type="smallBold"
-                themeColor="textSecondary"
-                onPress={showAlternativeCalculatorNotice}>
-                hitung dengan angka lain
-              </ThemedText>{' '}
-              di bawah.
-            </ThemedText>
-          </Card>
-
-          {/* Calorie summary (computed locally for display; backend is authoritative for the plan) */}
-          <Card style={styles.section}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              PERKIRAAN KEBUTUHAN HARIAN
-            </ThemedText>
-            <View style={styles.calorieRow}>
-              <CalorieStat label="BMR" value={`${calories.bmr}`} unit="kkal" />
-              <CalorieStat label="TDEE" value={`${calories.tdee}`} unit="kkal" />
-              <CalorieStat label="Target" value={`${calories.targetCalories}`} unit="kkal" highlight />
-            </View>
-            {calories.floorApplied ? (
-              <ThemedText type="small" themeColor="warning">
-                Target dinaikkan ke batas aman {calories.safeFloor} kkal.
-              </ThemedText>
-            ) : null}
-          </Card>
-
-          <ThemedText type="small" themeColor="textSecondary">
-            Estimasi edukatif untuk populasi umum, bukan saran medis individual.
-          </ThemedText>
-
-          <Card style={styles.section}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              TINGKAT AKTIVITAS
-            </ThemedText>
-            <View style={styles.chipRow}>
-              {ACTIVITY_LABELS.map((a) => (
-                <Chip
-                  key={a.value}
-                  label={a.label}
-                  selected={profile.activityLevel === a.value}
-                  onPress={() => updateProfile({ activityLevel: a.value })}
-                />
-              ))}
-            </View>
-
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              TUJUAN
-            </ThemedText>
-            <View style={styles.chipRow}>
-              {GOAL_LABELS.map((g) => (
-                <Chip
-                  key={g.value}
-                  label={g.label}
-                  selected={profile.goal === g.value}
-                  onPress={() => updateProfile({ goal: g.value })}
-                />
-              ))}
-            </View>
-
-            <ThemedText type="smallBold" themeColor="text">
-              Catatan pola makan (opsional)
-            </ThemedText>
-            <TextInput
-              value={profile.dietNotes}
-              onChangeText={(dietNotes) => updateProfile({ dietNotes: dietNotes.slice(0, 200) })}
-              placeholder="Contoh: vegetarian, alergi kacang, puasa"
-              placeholderTextColor={theme.textMuted}
-              multiline
-              style={[
-                styles.notesInput,
-                { borderColor: theme.border, color: theme.text, backgroundColor: theme.background },
-              ]}
-            />
-            <ThemedText type="small" themeColor="textMuted">
-              {(profile.dietNotes ?? '').length}/200
-            </ThemedText>
-          </Card>
-
-          <PillButton label="Buat rencana hari ini" onPress={() => router.push('/rencana')} />
-
+          {header}
+          {resultColumn}
+          {controlsColumn}
           <Disclaimer />
         </ScrollView>
       </SafeAreaView>
@@ -256,6 +305,17 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     gap: Spacing.three,
   },
+  // Web wide (>=880px): 2 kolom berdampingan, lebar maksimum lebih besar.
+  wideScrollContent: {
+    width: '100%',
+    maxWidth: WEB_WIDE_MAX_WIDTH,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.two,
+    gap: Spacing.three,
+  },
+  webRow: { flexDirection: 'row', gap: Spacing.four, alignItems: 'flex-start' },
+  webColumn: { flex: 1, gap: Spacing.three },
   title: { fontFamily: FontFamily.headingExtraBold, fontSize: 36, lineHeight: 40 },
   bmiCard: { gap: Spacing.three },
   section: { gap: Spacing.three },
