@@ -10,12 +10,20 @@ ever written to disk.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 from app.config import Settings
 from app.schemas import BodyEstimateResult
+
+logger = logging.getLogger(__name__)
+
+# Gemini status codes that mean "busy / rate limited, try again later".
+_BUSY_STATUS_CODES = (429, 503)
 
 # Sanity limits: anything outside these is a model failure, not a real body.
 _HEIGHT_MIN_CM = 100.0
@@ -85,9 +93,13 @@ async def estimate_body(
 ) -> BodyEstimateResult:
     """Ask Gemini to estimate height/weight from a photo.
 
+    When the primary model is overloaded (503/429), the configured fallback
+    model is tried once. Real failure reasons are logged on the server only.
+
     Raises:
-        HTTPException: 503 when the API key is missing, 502 when the model call
-        fails or returns data that does not satisfy `BodyEstimateResult`.
+        HTTPException: 503 when the API key is missing or every model is
+        overloaded, 502 when the model call fails or returns data that does
+        not satisfy `BodyEstimateResult`.
     """
     if not settings.gemini_api_key:
         raise HTTPException(
@@ -106,18 +118,49 @@ async def estimate_body(
         _USER_PROMPT,
     ]
 
-    try:
-        response = await client.aio.models.generate_content(
-            model=settings.gemini_model,
-            contents=contents,
-            config=config,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001 - never leak SDK internals to client
+    models = [settings.gemini_model]
+    fallback = settings.gemini_fallback_model
+    if fallback and fallback != settings.gemini_model:
+        models.append(fallback)
+
+    response = None
+    last_busy_error: Exception | None = None
+    for model in models:
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+            break
+        except genai_errors.APIError as exc:
+            if exc.code in _BUSY_STATUS_CODES:
+                logger.warning(
+                    "Gemini model %s is busy (%s %s): %s",
+                    model, exc.code, exc.status, exc.message,
+                )
+                last_busy_error = exc
+                continue
+            logger.warning(
+                "Gemini model %s failed (%s %s): %s",
+                model, exc.code, exc.status, exc.message,
+            )
+            raise HTTPException(
+                status_code=502, detail="Gemini request failed"
+            ) from exc
+        except Exception as exc:  # noqa: BLE001 - never leak SDK internals to client
+            logger.warning(
+                "Gemini model %s failed: %s: %s", model, type(exc).__name__, exc
+            )
+            raise HTTPException(
+                status_code=502, detail="Gemini request failed"
+            ) from exc
+
+    if response is None:
         raise HTTPException(
-            status_code=502, detail="Gemini request failed"
-        ) from exc
+            status_code=503,
+            detail="Layanan estimasi sedang sibuk. Coba lagi dalam beberapa saat.",
+        ) from last_busy_error
 
     parsed = getattr(response, "parsed", None)
     if isinstance(parsed, BodyEstimateResult):
@@ -127,6 +170,9 @@ async def estimate_body(
         try:
             result = BodyEstimateResult.model_validate_json(text)
         except Exception as exc:  # noqa: BLE001 - invalid model output
+            logger.warning(
+                "Gemini returned output that does not match the schema: %s", exc
+            )
             raise HTTPException(
                 status_code=502, detail="Gemini returned an invalid response"
             ) from exc

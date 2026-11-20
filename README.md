@@ -60,6 +60,10 @@ OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b
 `backend/.env` **tidak** di-commit (sudah di `.gitignore`). Yang di-commit hanya
 `backend/.env.example` berisi placeholder.
 
+Fitur kamera (estimasi tinggi/berat dari foto) memakai **Gemini** dan butuh satu
+kunci tambahan, `GEMINI_API_KEY`, di `backend/.env` yang sama — lihat
+[Bagian 7](#7-fitur-kamera--estimasi-tinggiberat-gemini).
+
 > BMI, rentang berat ideal, dan indikator (WHtR/WHR/lemak) tetap bisa dipakai
 > **tanpa** backend/kunci API — dihitung di perangkat. Backend hanya diperlukan untuk
 > "Buat rencana AI" dan pengukuran foto.
@@ -150,6 +154,124 @@ cd backend && python3 tests/test_smoke.py
 - **409 `screening_blocked`** → ada centang pada penyaringan kesehatan di tab Rencana.
 
 Detail lengkap: [`Docs.md`](./Docs.md).
+
+---
+
+## 7. Fitur kamera & estimasi tinggi/berat (Gemini)
+
+Alur: aplikasi mengambil foto (kamera atau galeri) → dikirim ke backend →
+backend memanggil Gemini untuk menaksir tinggi (cm) dan berat (kg) → hasilnya
+disimpan ke profil pengguna.
+
+> Kunci Gemini **hanya** hidup di server (`backend/.env`). Tidak pernah dikirim
+> ke aplikasi, tidak pernah masuk bundle JS, dan tidak boleh ditulis di README,
+> `.env.example`, atau kode.
+
+### Library yang perlu dipasang
+
+**Frontend (kamera & galeri)** — sudah terdaftar di `package.json`, tapi kalau
+kamu setup dari nol atau versinya bentrok, pasang ulang lewat Expo supaya versinya
+cocok dengan SDK:
+
+```bash
+npx expo install expo-camera expo-image-picker
+```
+
+**Backend (SDK Gemini)** — `google-genai` sudah ada di `backend/requirements.txt`,
+jadi cukup:
+
+```bash
+cd backend
+pip install -r requirements.txt
+cd ..
+```
+
+`google-genai` adalah SDK resmi Gemini untuk Python. Selain itu `python-dotenv`
+dipakai untuk membaca `backend/.env`, dan `python-multipart` untuk menerima
+upload file (`multipart/form-data`) di endpoint estimasi.
+
+> Modul kamera (`expo-camera`) mengandung kode native, jadi **Expo Go tidak
+> cukup**. Pakai development build: `npx expo run:android`, `npx expo run:ios`,
+> atau `eas build --profile development`.
+
+### Kunci API (backend/.env)
+
+1. Buat kunci Gemini di https://aistudio.google.com/apikey
+2. Tambahkan ke `backend/.env` (file yang sama dengan kunci OpenRouter):
+
+```env
+GEMINI_API_KEY=isi_kunci_gemini_kamu_di_sini
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
+```
+
+- `GEMINI_MODEL` — model utama untuk estimasi.
+- `GEMINI_FALLBACK_MODEL` — dicoba sekali kalau model utama sedang sibuk
+  (HTTP 429/503). Kosongkan untuk mematikan fallback.
+
+Kunci asli **jangan** di-commit. Yang di-commit hanya `backend/.env.example`
+berisi placeholder.
+
+### Menjalankan backend
+
+```bash
+npm run backend
+# atau manual:
+cd backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --env-file .env
+```
+
+Kalau `python3` tidak ada (umum di Windows), pakai Python dari virtualenv:
+
+```bash
+cd backend && .venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --env-file .env
+```
+
+Cek backend hidup:
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Tes endpoint upload foto (tanpa aplikasi)
+
+Ganti `your/custom/foto/path.jpeg` dengan path fotomu sendiri. Gunakan foto
+seluruh badan (berdiri, terlihat dari kepala sampai kaki):
+
+```bash
+curl.exe -X POST "http://localhost:8000/api/v1/estimate-body" -F "photo=@your/custom/foto/path.jpeg"
+```
+
+Catatan penting:
+
+- **Windows/PowerShell**: tulis `curl.exe`, bukan `curl`. Di PowerShell `curl`
+  adalah alias `Invoke-WebRequest` yang tidak mengenal `-X`/`-F` dan akan gagal
+  dengan `A parameter cannot be found that matches parameter name 'X'`.
+- **`photo=@` wajib**. `-F "path/foto.jpeg"` tanpa nama field akan ditolak
+  (422) karena endpoint mengharapkan field bernama `photo`.
+- Di Git Bash / macOS / Linux, `curl` biasa sudah cukup.
+
+Contoh respons sukses (`200`):
+
+```json
+{
+  "height_cm": 170.2,
+  "weight_kg": 65.4,
+  "confidence": "medium",
+  "warnings": []
+}
+```
+
+Arti status lain:
+
+| Status | Arti |
+|---|---|
+| `415 unsupported_media_type` | Format bukan JPEG/PNG/WebP. |
+| `413 payload_too_large` | Foto lebih dari 10 MB. |
+| `503` | `GEMINI_API_KEY` kosong, atau semua model sedang sibuk. |
+| `502` | Gemini menolak permintaan (mis. nama model salah). Alasan aslinya hanya muncul di log server (terminal uvicorn), bukan di respons. |
+
+Foto diproses di memori dan **tidak** disimpan ke disk, jadi tidak ada file
+temporer yang perlu dibersihkan.
 
 ---
 
