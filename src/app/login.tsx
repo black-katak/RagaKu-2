@@ -71,28 +71,17 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}>
             <AuthHeader showBack={false} />
 
-            <View
-              style={[
-                styles.badge,
-                { backgroundColor: theme.backgroundSelected },
-              ]}>
-              <Ionicons name="flash" size={12} color={theme.primary} />
-              <ThemedText type="smallBold" themeColor="primary" style={styles.badgeText}>
-                AI WORKOUT ENGINE 2.4
-              </ThemedText>
-            </View>
-
             <ThemedText type="subtitle" style={styles.heading}>
-              SELAMAT DATANG KEMBALI
+              SELAMAT DATANG
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-              Lanjutkan progres transformasi dan program latihan AI harianmu.
+              Masuk untuk membuka program latihanmu.
             </ThemedText>
 
             <Card style={styles.form}>
               <TextField
-                label="Email atau No. Handphone"
-                placeholder="contoh: dimas.atlet@gmail.com"
+                label="Email"
+                placeholder="nama@email.com"
                 keyboardType="email-address"
                 value={email}
                 onChangeText={(value) => {
@@ -128,13 +117,13 @@ export default function LoginScreen() {
                     color={rememberMe ? theme.primary : theme.textSecondary}
                   />
                   <ThemedText type="small" themeColor="textSecondary">
-                    Ingat Saya
+                    Ingat saya
                   </ThemedText>
                 </Pressable>
 
                 <Pressable hitSlop={8} onPress={() => router.push('/lupa-password')}>
                   <ThemedText type="smallBold" themeColor="primary" style={styles.forgotText}>
-                    LUPA KATA SANDI?
+                    Lupa kata sandi?
                   </ThemedText>
                 </Pressable>
               </View>
@@ -146,49 +135,22 @@ export default function LoginScreen() {
               ) : null}
 
               <PillButton
-                label="MASUK KE RAGAKU"
+                label="Masuk"
                 loading={loading}
                 onPress={handleLogin}
                 style={styles.loginButton}
               />
             </Card>
 
-            <View style={[styles.streakCard, { backgroundColor: theme.backgroundSelected }]}>
-              <View style={[styles.streakIcon, { backgroundColor: theme.primary }]}>
-                <Ionicons name="barbell" size={22} color="#FFFFFF" />
-              </View>
-              <View style={styles.streakCopy}>
-                <ThemedText type="smallBold">Target Hari Ini Menunggumu</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
-                  Sesi Calisthenics & Core AI siap disinkronkan
-                </ThemedText>
-              </View>
-              <View style={styles.streakValue}>
-                <ThemedText type="subtitle" themeColor="primary" style={styles.streakNumber}>
-                  14
-                </ThemedText>
-                <ThemedText type="smallBold" themeColor="textSecondary" style={styles.streakLabel}>
-                  HARI STREAK
-                </ThemedText>
-              </View>
-            </View>
-
             <View style={styles.footerRow}>
               <ThemedText type="default" themeColor="textSecondary">
-                Belum punya akun RagaKu?{' '}
+                Belum punya akun?{' '}
               </ThemedText>
               <Pressable hitSlop={8} onPress={() => router.push('/registrasi')}>
                 <ThemedText type="default" themeColor="primary" style={styles.footerLink}>
-                  DAFTAR SEKARANG
+                  Daftar
                 </ThemedText>
               </Pressable>
-            </View>
-
-            <View style={styles.trustRow}>
-              <Ionicons name="shield-checkmark" size={12} color={theme.textMuted} />
-              <ThemedText type="small" themeColor="textMuted" style={styles.trustText}>
-                Terenkripsi SSL 256-bit • Standar Privasi Biometrik
-              </ThemedText>
             </View>
           </ScrollView>
         </SafeAreaView>
@@ -217,19 +179,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.five,
     paddingBottom: Spacing.five,
     gap: Spacing.three,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    letterSpacing: 0.4,
-    fontSize: 11,
   },
   heading: {
     marginTop: Spacing.three,
@@ -260,35 +209,6 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: Spacing.two,
   },
-  streakCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    borderRadius: 16,
-    padding: Spacing.three,
-  },
-  streakIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  streakCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  streakValue: {
-    alignItems: 'flex-end',
-  },
-  streakNumber: {
-    fontSize: 28,
-    lineHeight: 30,
-  },
-  streakLabel: {
-    fontSize: 10,
-    letterSpacing: 0.3,
-  },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -297,15 +217,5 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     fontWeight: '700',
-  },
-  trustRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: Spacing.two,
-  },
-  trustText: {
-    fontSize: 11,
   },
 });

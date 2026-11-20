@@ -27,10 +27,10 @@ function isValidEmail(value: string) {
 }
 
 const STRENGTH_RULES: { key: string; label: string; test: (value: string) => boolean }[] = [
-  { key: 'length', label: 'Min. 8 karakter', test: (value) => value.length >= 8 },
+  { key: 'length', label: 'Minimal 8 karakter', test: (value) => value.length >= 8 },
   {
     key: 'case',
-    label: 'Huruf besar & kecil',
+    label: 'Huruf besar dan kecil',
     test: (value) => /[a-z]/.test(value) && /[A-Z]/.test(value),
   },
   { key: 'digit', label: 'Ada angka', test: (value) => /\d/.test(value) },
@@ -54,19 +54,14 @@ export default function RegistrasiScreen() {
   const [loading, setLoading] = useState(false);
 
   const passedRules = STRENGTH_RULES.filter((rule) => rule.test(password));
-  const strengthLabel =
-    password.length === 0
-      ? 'Belum Diisi'
-      : passedRules.length >= 3
-        ? 'Kuat'
-        : passedRules.length >= 2
-          ? 'Sedang'
-          : 'Lemah';
 
   const handleSubmit = async () => {
     const nextNameError = name.trim().length >= 3 ? undefined : 'Masukkan nama lengkap';
     const nextEmailError = isValidEmail(email) ? undefined : 'Masukkan email yang valid';
-    const nextPhoneError = phone.replace(/\D/g, '').length >= 8 ? undefined : 'Masukkan nomor WhatsApp yang valid';
+    const nextPhoneError =
+      phone.trim().length === 0 || phone.replace(/\D/g, '').length >= 8
+        ? undefined
+        : 'Masukkan nomor WhatsApp yang valid';
     const nextPasswordError = passedRules.length >= 3 ? undefined : 'Kata sandi belum memenuhi semua syarat';
     const nextAgreeError = agreed ? undefined : 'Anda harus menyetujui ketentuan';
 
@@ -103,24 +98,17 @@ export default function RegistrasiScreen() {
             showsVerticalScrollIndicator={false}>
             <AuthHeader />
 
-            <View style={[styles.badge, { backgroundColor: '#FFF1E6' }]}>
-              <Ionicons name="flash" size={12} color={theme.warning} />
-              <ThemedText type="smallBold" style={[styles.badgeText, { color: theme.warning }]}>
-                Uji Coba Gratis 7 Hari Termasuk
-              </ThemedText>
-            </View>
-
             <ThemedText type="subtitle" style={styles.heading}>
-              BUAT AKUN RAGAKU
+              BUAT AKUN
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-              Mulai personalisasi program latihan dan nutrisi berbasis AI telemetry presisi.
+              Isi data dasar. Program latihan disesuaikan di langkah berikutnya.
             </ThemedText>
 
             <Card style={styles.form}>
               <TextField
                 label="Nama Lengkap"
-                placeholder="Dimas Pratama"
+                placeholder="Nama lengkap"
                 value={name}
                 onChangeText={(value) => {
                   setName(value);
@@ -131,7 +119,7 @@ export default function RegistrasiScreen() {
               />
 
               <TextField
-                label="Alamat Email Aktif"
+                label="Email"
                 placeholder="nama@email.com"
                 keyboardType="email-address"
                 value={email}
@@ -144,19 +132,9 @@ export default function RegistrasiScreen() {
               />
 
               <View>
-                <View style={styles.phoneLabelRow}>
-                  <ThemedText type="smallBold" style={styles.phoneLabel}>
-                    Nomor WhatsApp
-                  </ThemedText>
-                  <View style={[styles.reminderBadge, { backgroundColor: '#FFF1E6' }]}>
-                    <ThemedText type="smallBold" style={{ color: theme.warning, fontSize: 11 }}>
-                      Reminder AI
-                    </ThemedText>
-                  </View>
-                </View>
                 <TextField
-                  label=""
-                  placeholder="812-3456-7890"
+                  label="Nomor WhatsApp (opsional)"
+                  placeholder="0812 xxxx xxxx"
                   keyboardType="phone-pad"
                   value={phone}
                   onChangeText={(value) => {
@@ -165,16 +143,15 @@ export default function RegistrasiScreen() {
                   }}
                   errorText={phoneError}
                   returnKeyType="next"
-                  containerStyle={styles.noLabelField}
                 />
                 <ThemedText type="small" themeColor="textMuted" style={styles.phoneHint}>
-                  Digunakan untuk jadwal latihan cerdas & motivasi personal WhatsApp.
+                  Dipakai untuk pengingat jadwal latihan.
                 </ThemedText>
               </View>
 
               <TextField
                 label="Kata Sandi"
-                placeholder="Buat kata sandi aman"
+                placeholder="Buat kata sandi"
                 isPassword
                 value={password}
                 onChangeText={(value) => {
@@ -186,33 +163,20 @@ export default function RegistrasiScreen() {
               />
 
               <View style={[styles.strengthBox, { backgroundColor: theme.backgroundSelected }]}>
-                <View style={styles.strengthHeaderRow}>
-                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.strengthLabel}>
-                    Kekuatan Sandi
-                  </ThemedText>
-                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.strengthLabel}>
-                    {strengthLabel}
-                  </ThemedText>
-                </View>
-                <View style={styles.rulesRow}>
+                <ThemedText type="smallBold" style={[styles.strengthLabel, { color: theme.primaryDark }]}>
+                  Syarat kata sandi
+                </ThemedText>
+                <View style={styles.rulesList}>
                   {STRENGTH_RULES.map((rule) => {
                     const passed = rule.test(password);
+                    if (passed) return null;
                     return (
-                      <View key={rule.key} style={styles.ruleItem}>
-                        <Ionicons
-                          name={passed ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={14}
-                          color={passed ? theme.primary : theme.textMuted}
-                        />
-                        <ThemedText
-                          type="small"
-                          style={[
-                            styles.ruleLabel,
-                            { color: passed ? theme.primary : theme.textMuted },
-                          ]}>
-                          {rule.label}
-                        </ThemedText>
-                      </View>
+                      <ThemedText
+                        key={rule.key}
+                        type="small"
+                        style={[styles.ruleLabel, { color: theme.primaryDark }]}>
+                        Belum terpenuhi: {rule.label}
+                      </ThemedText>
                     );
                   })}
                 </View>
@@ -231,7 +195,7 @@ export default function RegistrasiScreen() {
                   color={agreed ? theme.primary : theme.textSecondary}
                 />
                 <ThemedText type="small" themeColor="textSecondary" style={styles.termsText}>
-                  Saya menyetujui Ketentuan Layanan & Kebijakan Privasi Data Kesehatan RagaKu.
+                  Saya menyetujui Ketentuan Layanan dan Kebijakan Privasi Data Kesehatan.
                 </ThemedText>
               </Pressable>
               {agreeError ? (
@@ -247,32 +211,20 @@ export default function RegistrasiScreen() {
               ) : null}
 
               <PillButton
-                label="BUAT AKUN & MULAI EVALUASI"
+                label="Buat akun & mulai evaluasi"
                 loading={loading}
                 onPress={handleSubmit}
                 style={styles.submitButton}
               />
             </Card>
 
-            <View style={[styles.trustCard, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-              <View style={[styles.trustIcon, { backgroundColor: theme.backgroundSelected }]}>
-                <Ionicons name="shield-checkmark" size={18} color={theme.primary} />
-              </View>
-              <View style={styles.trustCopy}>
-                <ThemedText type="smallBold">Enkripsi Medis End-to-End</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Data biometrik Anda aman dan privat sesuai standar HIPAA.
-                </ThemedText>
-              </View>
-            </View>
-
             <View style={styles.footerRow}>
               <ThemedText type="small" themeColor="textSecondary">
-                Sudah memiliki akun?{' '}
+                Sudah punya akun?{' '}
               </ThemedText>
               <Pressable hitSlop={8} onPress={() => router.back()}>
                 <ThemedText type="smallBold" themeColor="primary">
-                  MASUK DI SINI
+                  Masuk di sini
                 </ThemedText>
               </Pressable>
             </View>
@@ -297,22 +249,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.five,
     gap: Spacing.three,
   },
-  backRow: {
-    alignSelf: 'flex-start',
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    letterSpacing: 0.4,
-    fontSize: 11,
-  },
   heading: {
     marginTop: Spacing.three,
     textAlign: 'center',
@@ -325,24 +261,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.four,
     gap: Spacing.three,
   },
-  phoneLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  phoneLabel: {
-    fontSize: 13,
-  },
-  reminderBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  noLabelField: {
-    gap: 0,
-  },
   phoneHint: {
     marginTop: 6,
     marginLeft: 4,
@@ -351,28 +269,16 @@ const styles = StyleSheet.create({
   strengthBox: {
     borderRadius: 12,
     padding: Spacing.three,
-    gap: 10,
-  },
-  strengthHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 6,
   },
   strengthLabel: {
-    fontSize: 11,
-    letterSpacing: 0.3,
+    fontSize: 13,
   },
-  rulesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  ruleItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  rulesList: {
     gap: 4,
   },
   ruleLabel: {
-    fontSize: 11,
+    fontSize: 13,
   },
   termsRow: {
     flexDirection: 'row',
@@ -385,25 +291,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: Spacing.two,
-  },
-  trustCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: Spacing.three,
-  },
-  trustIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trustCopy: {
-    flex: 1,
-    gap: 2,
   },
   footerRow: {
     flexDirection: 'row',
