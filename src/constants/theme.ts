@@ -84,7 +84,10 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 96 }) ?? 0;
+// Web nav moved to a top bar (see app-tabs.web.tsx) -- there's no bottom tab
+// bar to clear on web, so web gets 0. iOS/Android keep their native bottom
+// tab bar inset.
+export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 0 }) ?? 0;
 export const MaxContentWidth = 800;
 
 export const CardRadius = 16;

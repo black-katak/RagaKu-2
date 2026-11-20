@@ -331,6 +331,7 @@ export default function RencanaScreen() {
             <View style={styles.chatColumn}>
               <ScrollView
                 ref={scrollRef}
+                style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}>
                 {chatContent}
@@ -356,6 +357,7 @@ export default function RencanaScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           ref={scrollRef}
+          style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           {chatContent}
@@ -672,6 +674,7 @@ function Checkbox({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, alignItems: 'center', width: '100%' },
+  scrollView: { flex: 1, width: '100%' },
   scrollContent: {
     width: '100%',
     paddingHorizontal: Spacing.four,

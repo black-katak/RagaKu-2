@@ -7,12 +7,18 @@ import {
   TabListProps,
 } from 'expo-router/ui';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import { Pressable, useColorScheme, useWindowDimensions, View, StyleSheet } from 'react-native';
 
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+
+// Below this width, 4 icon+label tabs + logo overflow the viewport (fits
+// comfortably down to ~640px). Collapse to icon-only tabs so the bar never
+// clips -- this is a browser-width breakpoint for the website, unrelated to
+// the native app's own bottom tab bar (see app-tabs.tsx).
+const NAV_COMPACT_BREAKPOINT = 640;
 
 // Web nav = top bar (logo left, links right), per Figma "RagaKu v2 — Web" frames.
 // Native app keeps the bottom NativeTabs bar (see app-tabs.tsx) — this file is .web-only.
@@ -58,27 +64,38 @@ export function TabButton({
 }: TabTriggerSlotProps & { icon: IconKey }) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const { width } = useWindowDimensions();
+  const compact = width < NAV_COMPACT_BREAKPOINT;
 
   return (
-    <Pressable {...props} style={({ pressed }) => [styles.tabItem, pressed && styles.pressed]}>
+    <Pressable
+      {...props}
+      accessibilityLabel={children as string}
+      style={({ pressed }) => [styles.tabItem, pressed && styles.pressed]}>
       <MaterialCommunityIcons
         name={iconMap[icon]}
-        size={18}
+        size={compact ? 22 : 18}
         color={isFocused ? colors.primary : colors.textSecondary}
       />
-      <ThemedText
-        type={isFocused ? 'smallBold' : 'small'}
-        themeColor={isFocused ? 'primary' : 'textSecondary'}>
-        {children}
-      </ThemedText>
+      {compact ? null : (
+        <ThemedText
+          type={isFocused ? 'smallBold' : 'small'}
+          themeColor={isFocused ? 'primary' : 'textSecondary'}>
+          {children}
+        </ThemedText>
+      )}
     </Pressable>
   );
 }
 
 // Top bar per web spec: logo left, nav links right, thin bottom border, full width.
+// Below NAV_COMPACT_BREAKPOINT the wordmark hides and tabs go icon-only (see
+// TabButton) so the bar fits phone-width browsers without clipping.
 export function CustomTabList(props: TabListProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const { width } = useWindowDimensions();
+  const compact = width < NAV_COMPACT_BREAKPOINT;
 
   return (
     <ThemedView type="backgroundElement" style={[styles.bar, { borderBottomColor: colors.border }]}>
@@ -87,15 +104,19 @@ export function CustomTabList(props: TabListProps) {
           <View style={[styles.logoMark, { backgroundColor: colors.primary }]}>
             <MaterialCommunityIcons name="pulse" size={16} color="#FFFFFF" />
           </View>
-          <ThemedText type="smallBold" style={styles.logoWord}>
-            RAGAKU
-          </ThemedText>
-          <ThemedText type="small" themeColor="primary" style={styles.logoSuper}>
-            AI
-          </ThemedText>
+          {compact ? null : (
+            <>
+              <ThemedText type="smallBold" style={styles.logoWord}>
+                RAGAKU
+              </ThemedText>
+              <ThemedText type="small" themeColor="primary" style={styles.logoSuper}>
+                AI
+              </ThemedText>
+            </>
+          )}
         </View>
 
-        <View {...props} style={styles.links}>
+        <View {...props} style={[styles.links, compact && styles.linksCompact]}>
           {props.children}
         </View>
       </View>
@@ -115,8 +136,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   logoRow: {
     flexDirection: 'row',
@@ -144,6 +165,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.five,
+  },
+  linksCompact: {
+    gap: Spacing.three,
   },
   pressed: {
     opacity: 0.7,
