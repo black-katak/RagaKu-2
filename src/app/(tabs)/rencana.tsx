@@ -10,6 +10,7 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -127,7 +128,7 @@ export default function RencanaScreen() {
 
   const initializedRef = useRef(false);
   const idCounter = useRef(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const screeningY = useRef(0);
   const planY = useRef(0);
 

@@ -60,16 +60,21 @@ export function TabButton({
   children,
   isFocused,
   icon,
+  ref,
   ...props
 }: TabTriggerSlotProps & { icon: IconKey }) {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const colors = Colors[scheme ?? 'light'];
   const { width } = useWindowDimensions();
   const compact = width < NAV_COMPACT_BREAKPOINT;
 
   return (
     <Pressable
       {...props}
+      // expo-router/ui types this slot's ref as RefAttributes<View>; Pressable's
+      // RN 0.88 ref type is structurally compatible at runtime (it forwards to
+      // the underlying View) but TS can't prove it across the two ref brands.
+      ref={ref as React.Ref<React.ComponentRef<typeof Pressable>>}
       accessibilityLabel={children as string}
       style={({ pressed }) => [styles.tabItem, pressed && styles.pressed]}>
       <MaterialCommunityIcons
@@ -93,7 +98,7 @@ export function TabButton({
 // TabButton) so the bar fits phone-width browsers without clipping.
 export function CustomTabList(props: TabListProps) {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const colors = Colors[scheme ?? 'light'];
   const { width } = useWindowDimensions();
   const compact = width < NAV_COMPACT_BREAKPOINT;
 

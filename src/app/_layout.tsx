@@ -80,6 +80,10 @@ export default function RootLayout() {
  * Menunda pemasangan Stack sampai `ready` membuat deep-link di-resolve sekali saja,
  * terhadap status auth yang sudah benar.
  */
+export const unstable_settings = {
+  anchor: 'index',
+};
+
 function RootNavigator() {
   const { session, ready, completed } = useAuth();
   const theme = useTheme();
@@ -95,7 +99,7 @@ function RootNavigator() {
   const signedIn = !!session;
 
   return (
-    <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
 
       <Stack.Protected guard={!signedIn}>
