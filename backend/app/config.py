@@ -7,6 +7,13 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load backend/.env regardless of the folder uvicorn is started from. Variables
+# already set in the environment (shell, Docker, hosting) take precedence.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class Settings:
@@ -37,6 +44,15 @@ class Settings:
         self.measurement_command: str = os.getenv("MEASUREMENT_COMMAND", "")
         self.measurement_timeout_seconds: float = float(
             os.getenv("MEASUREMENT_TIMEOUT_SECONDS", "120")
+        )
+
+        # --- Gemini body estimation (F3: height/weight from photo) ---
+        self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+        self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+        # Tried when the primary model is overloaded (HTTP 503/429). Leave
+        # empty to disable the fallback.
+        self.gemini_fallback_model: str = os.getenv(
+            "GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite"
         )
 
         # --- Behaviour flags ---

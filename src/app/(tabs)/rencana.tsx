@@ -22,9 +22,12 @@ import { Card } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
 import { PillButton } from '@/components/ui/pill-button';
 import { BottomTabInset, FontFamily, Spacing } from '@/constants/theme';
+import { MOCK_USER_ID } from '@/constants/mockUser';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, api, type PlanResponse } from '@/lib/api';
+import { toPlanInputs, type WireCalorieTargets } from '@/lib/mappers';
 import { screeningBlocked, type HealthScreening } from '@/lib/model';
+import { saveWorkoutPlan } from '@/services/userService';
 
 // Breakpoint above which the web layout splits chat (left) from a standalone
 // screening panel (right). Below it (incl. narrow web / all mobile) the
@@ -171,6 +174,7 @@ export default function RencanaScreen() {
     setMessages((prev) => [...prev, { id: loadingId, role: 'assistant', kind: 'loading', text: LOADING_TEXT }]);
     try {
       const result = await api.plan(profile, screening);
+      // Show the plan first — persistence must never gate the UI.
       setPlan(result);
       const summaryId = nextId();
       const cardId = nextId();
@@ -184,6 +188,30 @@ export default function RencanaScreen() {
             : [m],
         ),
       );
+
+      // `api.healthSummary` is typed `Promise<unknown>`, so its calorie block
+      // is cast to the wire shape the mapper expects. It is optional context:
+      // without it `targets` is simply omitted from the stored plan.
+      let calories: WireCalorieTargets | null = null;
+      try {
+        const summary = (await api.healthSummary(profile, profile.bmiStandard)) as {
+          calories?: WireCalorieTargets;
+        } | null;
+        calories = summary?.calories ?? null;
+      } catch {
+        // Non-fatal: the plan itself already carries target_calories.
+      }
+
+      try {
+        const { workout } = toPlanInputs(result, { calories });
+        await saveWorkoutPlan(MOCK_USER_ID, workout);
+      } catch (saveError) {
+        const text =
+          saveError instanceof Error
+            ? `Rencana dibuat, tetapi gagal disimpan: ${saveError.message}`
+            : 'Rencana dibuat, tetapi gagal disimpan.';
+        setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', kind: 'text', text }]);
+      }
     } catch (e) {
       let replacement: ChatMessage;
       if (e instanceof ApiError && e.code === 'screening_blocked') {
