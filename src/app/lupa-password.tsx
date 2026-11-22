@@ -151,7 +151,8 @@ export default function LupaPasswordScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  safeArea: { flex: 1, alignItems: 'center' },
+  // Jangan tambah alignItems: 'center' di sini -- baca catatan MaxContentWidth di constants/theme.ts.
+  safeArea: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     width: '100%',

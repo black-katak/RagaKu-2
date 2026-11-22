@@ -54,7 +54,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    alignItems: 'center',
   },
   scrollContent: {
     flexGrow: 1,
