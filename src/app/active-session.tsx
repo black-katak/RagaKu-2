@@ -56,7 +56,7 @@ export default function ActiveSessionScreen() {
 
   const handleFinishSet = () => {
     if (currentSet >= TOTAL_SETS) {
-      router.replace('/workout');
+      router.replace('/progress');
       return;
     }
     setCurrentSet((value) => value + 1);
@@ -300,7 +300,8 @@ function Metric({ label, value, unit }: { label: string; value: string; unit: st
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safeArea: { flex: 1, alignItems: 'center' },
+  // Jangan tambah alignItems: 'center' di sini -- baca catatan MaxContentWidth di constants/theme.ts.
+  safeArea: { flex: 1 },
   scrollContent: {
     width: '100%',
     maxWidth: MaxContentWidth,

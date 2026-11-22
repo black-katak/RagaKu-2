@@ -1,5 +1,4 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,15 +28,14 @@ const SPORT_OPTIONS: {
   value: Activity;
   title: string;
   subtitle: string;
-  badge: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 }[] = [
-  { value: 'renang', title: 'Renang', subtitle: 'Bahu & mobilitas tulang belakang', badge: 'KARDIO LOW-IMPACT', icon: 'swim' },
-  { value: 'lari', title: 'Lari & Jogging', subtitle: 'Kardiovaskular & ketahanan kaki', badge: 'VO2 MAX BOOSTER', icon: 'run-fast' },
-  { value: 'badminton', title: 'Badminton', subtitle: 'Reaktivitas & eksplosivitas', badge: 'REFLEKS & AGILITY', icon: 'badminton' },
-  { value: 'basket', title: 'Bola Basket', subtitle: 'Lompatan vertikal & footwork', badge: 'AGILITY & HIIT', icon: 'basketball' },
-  { value: 'sepeda', title: 'Sepeda', subtitle: 'Daya tahan kuadrisep & stamina', badge: 'ENDURANCE', icon: 'bike' },
-  { value: 'futsal', title: 'Futsal', subtitle: 'Sprint interval anaerobik', badge: 'INTENSITAS TINGGI', icon: 'soccer' },
+  { value: 'renang', title: 'Renang', subtitle: 'Kardio low-impact, bahu dan tulang belakang', icon: 'swim' },
+  { value: 'lari', title: 'Lari dan jogging', subtitle: 'Daya tahan jantung dan kaki', icon: 'run-fast' },
+  { value: 'badminton', title: 'Badminton', subtitle: 'Refleks dan eksplosivitas', icon: 'badminton' },
+  { value: 'basket', title: 'Bola basket', subtitle: 'Lompatan dan footwork', icon: 'basketball' },
+  { value: 'sepeda', title: 'Sepeda', subtitle: 'Daya tahan paha dan stamina', icon: 'bike' },
+  { value: 'futsal', title: 'Futsal', subtitle: 'Sprint interval', icon: 'soccer' },
 ];
 
 const STYLE_OPTIONS: { value: Activity; label: string }[] = [
@@ -58,7 +56,7 @@ const DURATION_OPTIONS: { label: string; value: SessionDuration }[] = [
 
 export default function ActivitiesStep() {
   const theme = useTheme();
-  const { data, update, toggleInList } = useOnboarding();
+  const { data, update, toggleInList, complete } = useOnboarding();
   const { session } = useAuth();
 
   const [saving, setSaving] = useState(false);
@@ -85,7 +83,12 @@ export default function ActivitiesStep() {
           email: session?.email,
         }),
       );
-      router.replace('/beranda');
+      // `complete()` persists the same answers into the local Profile
+      // context and flips `completed` in AuthProvider; that in turn moves
+      // Stack.Protected's guard in _layout.tsx to the signed-in+completed
+      // group, which is what actually puts the user on the tabs. A manual
+      // `router.replace('/beranda')` here would race that guard switch.
+      await complete();
     } catch (error) {
       setSaveError(
         error instanceof Error
@@ -104,24 +107,12 @@ export default function ActivitiesStep() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <OnboardingHeader
-            eyebrow="TAHAP TERAKHIR"
+            eyebrow="LANGKAH TERAKHIR"
             step={4}
             totalSteps={4}
-            title="AKTIVITAS & OLAHRAGA FAVORIT"
-            description="Pilih minimal 2 aktivitas yang kamu nikmati untuk variasi jadwal kardio dan recovery mingguan."
+            title="OLAHRAGA FAVORIT"
+            description="Pilih minimal 2 aktivitas untuk variasi kardio dan pemulihan mingguan."
           />
-
-          <View style={[styles.algoIntroBox, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText type="smallBold" themeColor="primary" style={styles.algoIntroLabel}>
-              ALGORITMA PERSONALISASI
-            </ThemedText>
-            <ThemedText type="smallBold" style={styles.algoIntroTitle}>
-              ADAPTIF SESUAI PREFERENSI
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Mencegah kebosanan & cedera sendi repetitif.
-            </ThemedText>
-          </View>
 
           <View style={styles.grid}>
             {SPORT_OPTIONS.map((option) => (
@@ -129,7 +120,6 @@ export default function ActivitiesStep() {
                 key={option.value}
                 title={option.title}
                 subtitle={option.subtitle}
-                badge={option.badge}
                 selected={data.activities.includes(option.value)}
                 onPress={() => toggleInList('activities', option.value)}
                 icon={
@@ -145,7 +135,7 @@ export default function ActivitiesStep() {
 
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              GAYA LATIHAN FAVORIT (OPSIONAL)
+              Gaya latihan (opsional)
             </ThemedText>
             <View style={styles.chipRow}>
               {STYLE_OPTIONS.map((option) => (
@@ -161,13 +151,13 @@ export default function ActivitiesStep() {
 
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              JADWAL LATIHAN
+              Hari per minggu
             </ThemedText>
 
             <View style={styles.rowBetween}>
-              <ThemedText type="default">Hari per Minggu</ThemedText>
+              <ThemedText type="default">Hari per minggu</ThemedText>
               <ThemedText type="subtitle" themeColor="primary" style={styles.daysValue}>
-                {data.daysPerWeek}
+                {data.daysPerWeek} hari
               </ThemedText>
             </View>
             <SliderTrack
@@ -176,11 +166,11 @@ export default function ActivitiesStep() {
               max={7}
               step={1}
               onChange={(daysPerWeek) => update({ daysPerWeek })}
-              labels={['1', '2', '3', '4', '5', '6', '7']}
+              labels={['1 hari', '7 hari']}
             />
 
             <ThemedText type="default" style={styles.durationLabel}>
-              Durasi per Sesi
+              Durasi per sesi
             </ThemedText>
             <Segmented
               options={DURATION_OPTIONS}
@@ -189,30 +179,11 @@ export default function ActivitiesStep() {
             />
           </Card>
 
-          <View style={[styles.algoBox, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText type="small" themeColor="primary" style={styles.algoLabel}>
-              INTEGRASI KALENDER RAGAKU AI
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Aktivitas favorit akan disisipkan otomatis sebagai sesi aktif pada hari istirahat gym
-              angkat beban.
-            </ThemedText>
-          </View>
-
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, { backgroundColor: theme.primary }]} />
             <ThemedText type="smallBold" themeColor="textSecondary" style={{ flex: 1 }}>
-              {selectedSports.length} OLAHRAGA DIPILIH
+              {selectedSports.length} olahraga dipilih
             </ThemedText>
-            {selectedSports.length > 0 ? (
-              <ThemedText type="smallBold" themeColor="textSecondary">
-                {selectedSports
-                  .map((activity) => SPORT_OPTIONS.find((o) => o.value === activity)?.title)
-                  .filter(Boolean)
-                  .join(' & ')
-                  .toUpperCase()}
-              </ThemedText>
-            ) : null}
           </View>
 
           {saveError ? (
@@ -222,14 +193,11 @@ export default function ActivitiesStep() {
           ) : null}
 
           <PillButton
-            label="BUAT PROGRAM RAGAKU AI PERSONAL SAYA →"
+            label="Buat program"
             disabled={selectedSports.length < 2 || saving}
             loading={saving}
             onPress={handleSubmit}
           />
-          <ThemedText type="small" themeColor="textSecondary" style={styles.footerNote}>
-            ENKRIPSI BIOMETRIK & KEBUGARAN TERJAMIN
-          </ThemedText>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -238,7 +206,8 @@ export default function ActivitiesStep() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safeArea: { flex: 1, alignItems: 'center' },
+  // Jangan tambah alignItems: 'center' di sini -- baca catatan MaxContentWidth di constants/theme.ts.
+  safeArea: { flex: 1 },
   scrollContent: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -275,14 +244,6 @@ const styles = StyleSheet.create({
   durationLabel: {
     marginTop: Spacing.two,
   },
-  algoBox: {
-    padding: Spacing.three,
-    borderRadius: 16,
-    gap: 4,
-  },
-  algoLabel: {
-    letterSpacing: 0.4,
-  },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -293,19 +254,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-  algoIntroBox: {
-    padding: Spacing.three,
-    borderRadius: 16,
-    gap: 2,
-  },
-  algoIntroLabel: {
-    letterSpacing: 0.4,
-    fontSize: 10,
-  },
-  algoIntroTitle: {
-    fontSize: 16,
-  },
   footerNote: {
-    textAlign: 'center',
+    marginTop: Spacing.two,
   },
 });

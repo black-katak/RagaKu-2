@@ -25,7 +25,7 @@ export function screeningBlocked(s: HealthScreening): boolean {
   return s.isPregnant || s.hasChronicIllness || s.hasEatingDisorderHistory;
 }
 
-/** A measurement snapshot from a photo (PRD F3). */
+/** A measurement snapshot, either from a photo (PRD F3) or entered manually. */
 export interface MeasurementRecord {
   date: string; // ISO date
   waistCm?: number | null;
@@ -34,6 +34,8 @@ export interface MeasurementRecord {
   shoulderWidthCm?: number | null;
   chestCm?: number | null;
   neckCm?: number | null; // user-entered, needed for US Navy body fat
+  /** Asal angka: dari foto (model CV) atau diisi manual. Default 'photo' untuk record lama. */
+  source?: 'photo' | 'manual';
 }
 
 /** A progress log entry (PRD F6). */

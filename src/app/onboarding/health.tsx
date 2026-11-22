@@ -23,13 +23,13 @@ const ZONE_TO_INJURY: Record<BodyZone, Injury> = {
 };
 
 const QUICK_CONDITIONS: { value: Injury; label: string }[] = [
-  { value: 'lutut', label: 'Pemulihan Meniskus Lutut' },
-  { value: 'punggung', label: 'Nyeri Punggung Bawah' },
-  { value: 'bahu', label: 'Bahu Kaku' },
-  { value: 'tekanan-rendah', label: 'Tekanan Darah Rendah' },
-  { value: 'tekanan-tinggi', label: 'Tekanan Darah Tinggi' },
+  { value: 'lutut', label: 'Pemulihan meniskus lutut' },
+  { value: 'punggung', label: 'Nyeri punggung bawah' },
+  { value: 'bahu', label: 'Bahu kaku' },
+  { value: 'tekanan-rendah', label: 'Tekanan darah rendah' },
+  { value: 'tekanan-tinggi', label: 'Tekanan darah tinggi' },
   { value: 'asma', label: 'Asma' },
-  { value: 'tidak-ada', label: 'Tidak Ada Cedera / Kondisi Fit' },
+  { value: 'tidak-ada', label: 'Tidak ada cedera' },
 ];
 
 const PROTECTION_NOTES: Partial<Record<Injury, string>> = {
@@ -74,25 +74,18 @@ export default function HealthStep() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <OnboardingHeader
-            eyebrow="ONBOARDING ASSESSMENT"
+            eyebrow="RIWAYAT KESEHATAN"
             step={2}
             totalSteps={4}
-            title="RIWAYAT CEDERA & KESEHATAN"
-            description="Tandai area tubuh yang perlu dihindari atau dipulihkan agar RagaKu AI memodifikasi gerakan latihan secara aman."
+            title="AREA BERMASALAH"
+            description="Ketuk bagian tubuh yang cedera atau perlu dihindari. Gerakan latihan disesuaikan."
           />
 
           <Card style={styles.section}>
-            <View style={[styles.scanBadge, { backgroundColor: theme.backgroundSelected }]}>
-              <Ionicons name="body" size={14} color={theme.primary} />
-              <ThemedText type="smallBold" themeColor="primary">
-                BIOMETRIC SCAN ACTIVE
-              </ThemedText>
-            </View>
-
             <Segmented
               options={[
-                { label: 'DEPAN', value: 'depan' },
-                { label: 'BELAKANG', value: 'belakang' },
+                { label: 'Depan', value: 'depan' },
+                { label: 'Belakang', value: 'belakang' },
               ]}
               value={bodyView}
               onChange={setBodyView}
@@ -101,17 +94,16 @@ export default function HealthStep() {
             <BodyDiagram activeZones={activeZones} onToggleZone={toggleZone} />
 
             <ThemedText type="small" themeColor="textSecondary" style={styles.scanHint}>
-              Ketuk titik persendian atau pilih tag kondisi di bawah
+              {bodyView === 'depan'
+                ? 'Bahu kiri dipilih. Sisi mengikuti tubuhmu, bukan layar. Ketuk lagi untuk membatalkan.'
+                : 'Tampak belakang. Sisi mengikuti tubuhmu, bukan layar. Pilih area punggung atau bahu.'}
             </ThemedText>
           </Card>
 
           <Card style={styles.section}>
             <View style={styles.rowBetween}>
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                KONDISI CEPAT
-              </ThemedText>
-              <ThemedText type="smallBold" themeColor="primary">
-                {activeInjuries.length} TERPILIH
+                Kondisi cepat
               </ThemedText>
             </View>
             <View style={styles.chipRow}>
@@ -129,14 +121,14 @@ export default function HealthStep() {
           <Card style={styles.section}>
             <View style={styles.rowBetween}>
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                KONDISI / RIWAYAT LAINNYA (KUSTOM)
+                Riwayat lain (opsional)
               </ThemedText>
               <ThemedText
                 type="smallBold"
                 themeColor="primary"
                 style={styles.addNoteLink}
                 onPress={() => setShowNoteInput((prev) => !prev)}>
-                + TAMBAH CATATAN KHUSUS
+                + Tambah catatan
               </ThemedText>
             </View>
 
@@ -145,7 +137,7 @@ export default function HealthStep() {
                 <TextInput
                   value={noteDraft}
                   onChangeText={setNoteDraft}
-                  placeholder="Contoh: Pasca operasi hernia / jahitan di bagian perut 6 bulan lalu, saraf kejepit ringan..."
+                  placeholder="Tulis kondisi lain di sini"
                   placeholderTextColor={theme.textMuted}
                   multiline
                   numberOfLines={3}
@@ -155,7 +147,7 @@ export default function HealthStep() {
                   ]}
                 />
                 <PillButton
-                  label="SIMPAN"
+                  label="Simpan"
                   style={styles.saveButton}
                   onPress={() => {
                     if (!noteDraft.trim()) return;
@@ -182,17 +174,12 @@ export default function HealthStep() {
           </Card>
 
           {activeInjuries.length > 0 ? (
-            <View style={[styles.protectionBox, { backgroundColor: '#FFF7ED', borderColor: theme.warning }]}>
+            <View style={[styles.protectionBox, { backgroundColor: theme.backgroundSelected, borderColor: theme.border }]}>
               <View style={styles.protectionHeader}>
-                <Ionicons name="shield-checkmark" size={16} color={theme.warning} />
-                <ThemedText type="smallBold" style={{ color: theme.warning, flex: 1 }}>
-                  RAGAKU AI PROTECTION PROTOCOL AKTIF
+                <Ionicons name="information-circle" size={16} color={theme.primary} />
+                <ThemedText type="smallBold" themeColor="primary">
+                  Catatan latihan
                 </ThemedText>
-                <View style={[styles.safeBadge, { backgroundColor: '#FFEDD5' }]}>
-                  <ThemedText type="small" style={{ color: theme.warning, fontSize: 10 }}>
-                    PEMBERITAHUAN AMAN
-                  </ThemedText>
-                </View>
               </View>
               {activeInjuries.map((injury) => (
                 <ThemedText key={injury} type="small" themeColor="textSecondary" style={styles.protectionText}>
@@ -203,7 +190,7 @@ export default function HealthStep() {
           ) : null}
 
           <PillButton
-            label="SIMPAN & LANJUT PILIH ALAT →"
+            label="Simpan & lanjut"
             onPress={() => router.push('/onboarding/equipment')}
           />
           <ThemedText
@@ -211,7 +198,7 @@ export default function HealthStep() {
             themeColor="textSecondary"
             style={styles.skipLink}
             onPress={() => router.push('/onboarding/equipment')}>
-            LEWATI LANGKAH INI
+            Lewati langkah ini
           </ThemedText>
         </ScrollView>
       </SafeAreaView>
@@ -221,7 +208,8 @@ export default function HealthStep() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safeArea: { flex: 1, alignItems: 'center' },
+  // Jangan tambah alignItems: 'center' di sini -- baca catatan MaxContentWidth di constants/theme.ts.
+  safeArea: { flex: 1 },
   scrollContent: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -236,15 +224,6 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     letterSpacing: 0.4,
-  },
-  scanBadge: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
   },
   scanHint: {
     textAlign: 'center',
@@ -269,11 +248,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  safeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
   },
   protectionText: {
     lineHeight: 18,

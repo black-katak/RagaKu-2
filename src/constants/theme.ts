@@ -84,7 +84,20 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 96 }) ?? 0;
+// Web nav moved to a top bar (see app-tabs.web.tsx) -- there's no bottom tab
+// bar to clear on web, so web gets 0. iOS/Android keep their native bottom
+// tab bar inset.
+export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 0 }) ?? 0;
+// Lebar maksimum kolom konten (dipakai di scrollContent setiap layar, bersama
+// width: '100%' + alignSelf: 'center').
+//
+// PENTING: pembungkus ScrollView-nya HARUS punya lebar yang pasti. Kalau induk
+// ScrollView memakai alignItems: 'center' (tanpa width eksplisit), lebar
+// ScrollView jadi shrink-to-fit alias tak tentu, sehingga width: '100%' di
+// scrollContent tidak bisa di-resolve. Yoga lalu mengukur kontennya tanpa batas
+// lebar, dan hasilnya dijepit ke angka di bawah ini -- layar jadi di-layout
+// selebar 800dp di HP ~360-411dp, jadi terpotong di kanan. Di web tidak kelihatan
+// karena shrink-to-fit CSS selalu dibatasi lebar yang tersedia.
 export const MaxContentWidth = 800;
 
 export const CardRadius = 16;

@@ -21,12 +21,15 @@ export interface Account {
   phone?: string;
   passwordHash: string;
   createdAt: string;
+  /** Apakah akun ini sudah menyelesaikan alur onboarding (dipakai guard navigasi). */
+  onboardingCompleted: boolean;
 }
 
 export interface Session {
   userId: string;
   email: string;
   name: string;
+  onboardingCompleted: boolean;
 }
 
 /** Hash kata sandi non-kriptografis sederhana (hanya untuk prototipe lokal). */
@@ -54,6 +57,15 @@ async function writeAccounts(accounts: Account[]): Promise<void> {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function toSession(account: Account): Session {
+  return {
+    userId: account.id,
+    email: account.email,
+    name: account.name,
+    onboardingCompleted: account.onboardingCompleted,
+  };
 }
 
 export class AuthError extends Error {}
@@ -86,9 +98,10 @@ export const auth = {
       phone: input.phone?.trim(),
       passwordHash: hashPassword(input.password),
       createdAt: new Date().toISOString(),
+      onboardingCompleted: false,
     };
     await writeAccounts([...accounts, account]);
-    const session: Session = { userId: account.id, email: account.email, name: account.name };
+    const session = toSession(account);
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
     return session;
   },
@@ -100,13 +113,33 @@ export const auth = {
     if (!account || account.passwordHash !== hashPassword(input.password)) {
       throw new AuthError('Email atau kata sandi salah.');
     }
-    const session: Session = { userId: account.id, email: account.email, name: account.name };
+    const session = toSession(account);
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
     return session;
   },
 
   async logout(): Promise<void> {
     await AsyncStorage.removeItem(SESSION_KEY);
+  },
+
+  /**
+   * Tandai akun yang sedang login sudah menyelesaikan onboarding. Memperbarui akun yang
+   * tersimpan (supaya login berikutnya langsung ke app) dan sesi yang aktif.
+   */
+  async markOnboardingComplete(userId: string): Promise<Session> {
+    const accounts = await readAccounts();
+    const index = accounts.findIndex((a) => a.id === userId);
+    if (index === -1) {
+      throw new AuthError('Akun tidak ditemukan.');
+    }
+    const account: Account = { ...accounts[index], onboardingCompleted: true };
+    const nextAccounts = [...accounts];
+    nextAccounts[index] = account;
+    await writeAccounts(nextAccounts);
+
+    const session = toSession(account);
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    return session;
   },
 
   /** Hapus seluruh akun & sesi (dipakai oleh "hapus semua data"). */

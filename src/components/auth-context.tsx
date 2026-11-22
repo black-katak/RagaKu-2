@@ -1,6 +1,7 @@
 /**
  * AuthProvider: menyimpan status sesi (login) dan memuatnya saat start.
- * Sumber kebenaran untuk apakah pengguna sudah masuk.
+ * Sumber kebenaran untuk apakah pengguna sudah masuk DAN apakah onboarding-nya selesai
+ * (dipakai oleh guard navigasi di src/app/_layout.tsx).
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
@@ -9,9 +10,12 @@ import { auth, type Session } from '@/lib/auth';
 interface AuthContextValue {
   session: Session | null;
   ready: boolean;
+  /** Turunan dari session.onboardingCompleted; false bila belum login. */
+  completed: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: { name: string; email: string; phone?: string; password: string }) => Promise<void>;
   signOut: () => Promise<void>;
+  completeOnboarding: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -38,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       ready,
+      completed: session?.onboardingCompleted ?? false,
       async signIn(email, password) {
         setSession(await auth.login({ email, password }));
       },
@@ -47,6 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         await auth.logout();
         setSession(null);
+      },
+      async completeOnboarding() {
+        if (!session) return;
+        setSession(await auth.markOnboardingComplete(session.userId));
       },
     }),
     [session, ready],
