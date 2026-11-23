@@ -156,23 +156,46 @@ export const api = {
 
   async measure(
     photoUri: string,
-    heightCm: number,
-    gender: Gender,
+    heightCm?: number,
+    gender?: Gender | string,
   ): Promise<MeasurementResponse> {
     const form = new FormData();
-    form.append('height_cm', String(heightCm));
-    form.append('gender', gender);
-    form.append('photo', {
-      // React Native FormData file shape.
-      uri: photoUri,
-      name: 'photo.jpg',
-      type: 'image/jpeg',
-    } as unknown as Blob);
+    const safeHeight = heightCm && !isNaN(heightCm) && heightCm > 0 ? heightCm : 170;
+    form.append('height_cm', String(safeHeight));
+
+    const normalizedGender =
+      gender === 'wanita' || gender === 'female' ? 'female' : 'male';
+    form.append('gender', normalizedGender);
+
+    if (Platform.OS === 'web') {
+      try {
+        const fileResp = await fetch(photoUri);
+        const blob = await fileResp.blob();
+        form.append('photo', blob, 'photo.jpg');
+      } catch {
+        form.append('photo', photoUri);
+      }
+    } else {
+      const filename = photoUri.split('/').pop() || 'photo.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const ext = match ? match[1].toLowerCase() : 'jpg';
+      const type =
+        ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      form.append('photo', {
+        uri: Platform.OS === 'android' ? photoUri : photoUri.replace('file://', ''),
+        name: filename,
+        type,
+      } as unknown as Blob);
+    }
 
     let resp: Response;
     try {
       resp = await fetch(`${API_BASE_URL}/api/v1/measure`, {
         method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
         body: form,
       });
     } catch {

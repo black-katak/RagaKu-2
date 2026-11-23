@@ -43,7 +43,7 @@ export default function MeasurementScreen() {
       });
       router.back();
     } catch (e) {
-      setPhase('capture');
+      setPhase(permission?.granted ? 'capture' : 'consent');
       if (e instanceof ApiError) {
         if (e.status === 0) setError('Tidak dapat terhubung ke server pengukuran.');
         else if (e.status === 503) setError('Layanan pengukuran belum aktif di server.');
@@ -63,7 +63,7 @@ export default function MeasurementScreen() {
 
   const pickFromLibrary = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      mediaTypes: ['images'],
       quality: 0.7,
     });
     if (!result.canceled && result.assets[0]?.uri) {

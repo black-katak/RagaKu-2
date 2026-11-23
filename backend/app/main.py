@@ -106,18 +106,42 @@ async def daily_plan(
 
 @app.post("/api/v1/measure")
 async def measure(
-    height_cm: float = Form(...),
-    gender: Gender = Form(Gender.male),
     photo: UploadFile = File(...),
+    height_cm: float = Form(170.0),
+    gender: str = Form("male"),
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
+    if not photo:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "missing_photo", "detail": "Foto wajib diunggah."},
+        )
+
     image_bytes = await photo.read()
+    if not image_bytes:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "empty_photo", "detail": "File foto kosong."},
+        )
+
     suffix = ""
     if photo.filename and "." in photo.filename:
         suffix = "." + photo.filename.rsplit(".", 1)[-1]
+
+    gender_clean = gender.strip().lower() if gender else "male"
+    gender_enum = (
+        Gender.female
+        if gender_clean in ("female", "wanita")
+        else Gender.male
+    )
+
     try:
         result = await measurement.run_measurement(
-            settings, image_bytes, height_cm, suffix or ".jpg"
+            settings,
+            image_bytes,
+            height_cm,
+            suffix or ".jpg",
+            gender=gender_enum,
         )
     except measurement.MeasurementError as exc:
         return JSONResponse(

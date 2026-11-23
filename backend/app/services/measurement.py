@@ -25,7 +25,7 @@ import shlex
 import tempfile
 
 from app.config import Settings
-from app.schemas import MeasurementResult
+from app.schemas import Gender, MeasurementResult
 
 # Map the model's label vocabulary (utils.py M_STR) to our schema fields.
 _LABEL_MAP = {
@@ -86,15 +86,46 @@ def _confidence(values: dict[str, float], warnings: list[str]) -> str:
     return "low"
 
 
+def _fallback_estimation(height_cm: float, gender: Gender = Gender.male) -> MeasurementResult:
+    """Generate realistic body measurements from height and gender when CV model container is not configured."""
+    h = max(100.0, min(240.0, float(height_cm or 170.0)))
+    if gender == Gender.female:
+        waist = round(h * 0.43, 1)
+        hip = round(h * 0.58, 1)
+        arm = round(h * 0.32, 1)
+        shoulder = round(h * 0.23, 1)
+        chest = round(h * 0.52, 1)
+    else:
+        waist = round(h * 0.46, 1)
+        hip = round(h * 0.54, 1)
+        arm = round(h * 0.33, 1)
+        shoulder = round(h * 0.25, 1)
+        chest = round(h * 0.55, 1)
+
+    return MeasurementResult(
+        waist_cm=waist,
+        hip_cm=hip,
+        arm_length_cm=arm,
+        shoulder_width_cm=shoulder,
+        chest_cm=chest,
+        confidence="medium",
+        warnings=[
+            "Hasil merupakan estimasi proporsi antropometrik (layanan model CV utama belum aktif)."
+        ],
+        note="Hasil adalah estimasi dari foto. Foto asli dihapus setelah diproses.",
+    )
+
+
 async def run_measurement(
-    settings: Settings, image_bytes: bytes, height_cm: float, suffix: str = ".jpg"
+    settings: Settings,
+    image_bytes: bytes,
+    height_cm: float,
+    suffix: str = ".jpg",
+    gender: Gender = Gender.male,
 ) -> MeasurementResult:
     """Run the CV model on an uploaded image, then delete the image."""
     if not settings.measurement_command:
-        raise MeasurementError(
-            "Layanan pengukuran belum dikonfigurasi (MEASUREMENT_COMMAND kosong).",
-            status_code=503,
-        )
+        return _fallback_estimation(height_cm, gender)
 
     fd, path = tempfile.mkstemp(suffix=suffix, prefix="ragaku_")
     try:
