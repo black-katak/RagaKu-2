@@ -46,6 +46,17 @@ export const storage = {
     await writeJson(KEYS.measurements, next);
     return next;
   },
+  /**
+   * Simpan ukuran, menimpa record di tanggal yang sama (sama seperti addProgress) —
+   * supaya mengedit ukuran manual hari ini tidak menumpuk record baru setiap kali disimpan.
+   */
+  async upsertMeasurement(m: MeasurementRecord): Promise<MeasurementRecord[]> {
+    const list = await this.getMeasurements();
+    const filtered = list.filter((entry) => entry.date !== m.date);
+    const next = [...filtered, m].sort((a, b) => a.date.localeCompare(b.date));
+    await writeJson(KEYS.measurements, next);
+    return next;
+  },
 
   // Progress ---------------------------------------------------------------
   async getProgress(): Promise<ProgressEntry[]> {

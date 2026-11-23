@@ -18,6 +18,7 @@ from app import __version__
 from app.config import Settings, get_settings
 from app.schemas import (
     BmiStandard,
+    BodyEstimateResult,
     Gender,
     HealthSummary,
     IndicatorRequest,
@@ -25,7 +26,7 @@ from app.schemas import (
     PlanRequest,
     PlanResponse,
 )
-from app.services import ai_plan, health, measurement
+from app.services import ai_plan, gemini_estimator, health, measurement
 
 app = FastAPI(title="RagaKu API", version=__version__)
 
@@ -149,6 +150,44 @@ async def measure(
             content={"error": "measurement_failed", "detail": exc.message},
         )
     return JSONResponse(status_code=200, content=result.model_dump())
+
+
+# Body estimation upload limits (F3). No max-size setting exists yet.
+_ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+@app.post("/api/v1/estimate-body", response_model=BodyEstimateResult)
+async def estimate_body(
+    photo: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+) -> BodyEstimateResult | JSONResponse:
+    """Estimate height and weight from a photo using Gemini.
+
+    The image is handled purely in memory: no temp file is created, so there is
+    nothing to clean up afterwards (PRD section 7).
+    """
+    mime_type = (photo.content_type or "").split(";", 1)[0].strip().lower()
+    if mime_type not in _ALLOWED_IMAGE_TYPES:
+        return JSONResponse(
+            status_code=415,
+            content={
+                "error": "unsupported_media_type",
+                "detail": "Format foto harus JPEG, PNG, atau WebP.",
+            },
+        )
+
+    image_bytes = await photo.read()
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={
+                "error": "payload_too_large",
+                "detail": "Ukuran foto maksimal 10 MB.",
+            },
+        )
+
+    return await gemini_estimator.estimate_body(settings, image_bytes, mime_type)
 
 
 @app.delete("/api/v1/data")

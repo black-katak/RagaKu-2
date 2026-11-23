@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +19,7 @@ import { AuthHeader } from '@/components/ui/auth-header';
 import { Card } from '@/components/ui/card';
 import { PillButton } from '@/components/ui/pill-button';
 import { TextField } from '@/components/ui/text-field';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { AuthError } from '@/lib/auth';
 
@@ -26,9 +27,19 @@ function isValidEmail(value: string) {
   return /^\S+@\S+\.\S+$/.test(value);
 }
 
+// Breakpoint above which auth screens split into a brand panel (left) +
+// form card (right), per Figma "RagaKu v2 — Web". Below it (incl. narrow
+// web / all mobile) the single-column layout stays exactly as-is.
+const WEB_WIDE_BREAKPOINT = 880;
+const BRAND_HEADING = 'LATIHAN YANG MENYESUAIKAN TUBUHMU';
+const BRAND_TAGLINE =
+  'Program latihan personal yang menyesuaikan kondisi tubuh, alat, dan waktu yang kamu punya.';
+
 export default function LoginScreen() {
   const theme = useTheme();
   const { signIn } = useAuth();
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= WEB_WIDE_BREAKPOINT;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
@@ -50,13 +61,130 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email, password);
-      router.replace('/beranda');
+      // Tidak perlu navigasi manual: Stack.Protected di root layout otomatis
+      // mengarahkan setelah sesi berubah (lihat src/app/_layout.tsx).
     } catch (e) {
       setFormError(e instanceof AuthError ? e.message : 'Gagal masuk. Coba lagi.');
     } finally {
       setLoading(false);
     }
   };
+
+  const formContent = (
+    <>
+      <ThemedText type="subtitle" style={styles.heading}>
+        SELAMAT DATANG
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
+        Masuk untuk membuka program latihanmu.
+      </ThemedText>
+
+      <Card style={styles.form}>
+        <TextField
+          label="Email"
+          placeholder="nama@email.com"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={(value) => {
+            setEmail(value);
+            if (emailError) setEmailError(undefined);
+          }}
+          errorText={emailError}
+          returnKeyType="next"
+        />
+
+        <TextField
+          label="Kata Sandi"
+          placeholder="Minimal 8 karakter"
+          isPassword
+          value={password}
+          onChangeText={(value) => {
+            setPassword(value);
+            if (passwordError) setPasswordError(undefined);
+          }}
+          errorText={passwordError}
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
+        />
+
+        <View style={styles.optionsRow}>
+          <Pressable
+            style={styles.rememberRow}
+            hitSlop={8}
+            onPress={() => setRememberMe((value) => !value)}>
+            <Ionicons
+              name={rememberMe ? 'checkbox' : 'square-outline'}
+              size={18}
+              color={rememberMe ? theme.primary : theme.textSecondary}
+            />
+            <ThemedText type="small" themeColor="textSecondary">
+              Ingat saya
+            </ThemedText>
+          </Pressable>
+
+          <Pressable hitSlop={8} onPress={() => router.push('/lupa-password')}>
+            <ThemedText type="smallBold" themeColor="primary" style={styles.forgotText}>
+              Lupa kata sandi?
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {formError ? (
+          <ThemedText type="small" themeColor="warning">
+            {formError}
+          </ThemedText>
+        ) : null}
+
+        <PillButton
+          label="Masuk"
+          loading={loading}
+          onPress={handleLogin}
+          style={styles.loginButton}
+        />
+      </Card>
+
+      <View style={styles.footerRow}>
+        <ThemedText type="default" themeColor="textSecondary">
+          Belum punya akun?{' '}
+        </ThemedText>
+        <Pressable hitSlop={8} onPress={() => router.push('/registrasi')}>
+          <ThemedText type="default" themeColor="primary" style={styles.footerLink}>
+            Daftar
+          </ThemedText>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  if (isWideWeb) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeAreaWide} edges={['top']}>
+          <View style={styles.webRow}>
+            <View style={[styles.brandPanel, { backgroundColor: theme.primaryDark }]}>
+              <View style={styles.brandLogoRow}>
+                <View style={styles.brandLogoMark}>
+                  <Ionicons name="pulse" size={18} color="#FFFFFF" />
+                </View>
+                <ThemedText style={styles.brandLogoWord}>RAGAKU</ThemedText>
+                <ThemedText style={styles.brandLogoSuper}>AI</ThemedText>
+              </View>
+              <ThemedText style={styles.brandHeading}>{BRAND_HEADING}</ThemedText>
+              <ThemedText style={styles.brandTagline}>{BRAND_TAGLINE}</ThemedText>
+            </View>
+
+            <ScrollView
+              style={styles.formColumn}
+              contentContainerStyle={styles.webFormContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
+              {formContent}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -69,126 +197,7 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
             <AuthHeader showBack={false} />
-
-            <View
-              style={[
-                styles.badge,
-                { backgroundColor: theme.backgroundSelected },
-              ]}>
-              <Ionicons name="flash" size={12} color={theme.primary} />
-              <ThemedText type="smallBold" themeColor="primary" style={styles.badgeText}>
-                AI WORKOUT ENGINE 2.4
-              </ThemedText>
-            </View>
-
-            <ThemedText type="subtitle" style={styles.heading}>
-              SELAMAT DATANG KEMBALI
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-              Lanjutkan progres transformasi dan program latihan AI harianmu.
-            </ThemedText>
-
-            <Card style={styles.form}>
-              <TextField
-                label="Email atau No. Handphone"
-                placeholder="contoh: dimas.atlet@gmail.com"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value);
-                  if (emailError) setEmailError(undefined);
-                }}
-                errorText={emailError}
-                returnKeyType="next"
-              />
-
-              <TextField
-                label="Kata Sandi"
-                placeholder="Minimal 8 karakter"
-                isPassword
-                value={password}
-                onChangeText={(value) => {
-                  setPassword(value);
-                  if (passwordError) setPasswordError(undefined);
-                }}
-                errorText={passwordError}
-                returnKeyType="done"
-                onSubmitEditing={handleLogin}
-              />
-
-              <View style={styles.optionsRow}>
-                <Pressable
-                  style={styles.rememberRow}
-                  hitSlop={8}
-                  onPress={() => setRememberMe((value) => !value)}>
-                  <Ionicons
-                    name={rememberMe ? 'checkbox' : 'square-outline'}
-                    size={18}
-                    color={rememberMe ? theme.primary : theme.textSecondary}
-                  />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Ingat Saya
-                  </ThemedText>
-                </Pressable>
-
-                <Pressable hitSlop={8} onPress={() => router.push('/lupa-password')}>
-                  <ThemedText type="smallBold" themeColor="primary" style={styles.forgotText}>
-                    LUPA KATA SANDI?
-                  </ThemedText>
-                </Pressable>
-              </View>
-
-              {formError ? (
-                <ThemedText type="small" themeColor="warning">
-                  {formError}
-                </ThemedText>
-              ) : null}
-
-              <PillButton
-                label="MASUK KE RAGAKU"
-                loading={loading}
-                onPress={handleLogin}
-                style={styles.loginButton}
-              />
-            </Card>
-
-            <View style={[styles.streakCard, { backgroundColor: theme.backgroundSelected }]}>
-              <View style={[styles.streakIcon, { backgroundColor: theme.primary }]}>
-                <Ionicons name="barbell" size={22} color="#FFFFFF" />
-              </View>
-              <View style={styles.streakCopy}>
-                <ThemedText type="smallBold">Target Hari Ini Menunggumu</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
-                  Sesi Calisthenics & Core AI siap disinkronkan
-                </ThemedText>
-              </View>
-              <View style={styles.streakValue}>
-                <ThemedText type="subtitle" themeColor="primary" style={styles.streakNumber}>
-                  14
-                </ThemedText>
-                <ThemedText type="smallBold" themeColor="textSecondary" style={styles.streakLabel}>
-                  HARI STREAK
-                </ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.footerRow}>
-              <ThemedText type="default" themeColor="textSecondary">
-                Belum punya akun RagaKu?{' '}
-              </ThemedText>
-              <Pressable hitSlop={8} onPress={() => router.push('/registrasi')}>
-                <ThemedText type="default" themeColor="primary" style={styles.footerLink}>
-                  DAFTAR SEKARANG
-                </ThemedText>
-              </Pressable>
-            </View>
-
-            <View style={styles.trustRow}>
-              <Ionicons name="shield-checkmark" size={12} color={theme.textMuted} />
-              <ThemedText type="small" themeColor="textMuted" style={styles.trustText}>
-                Terenkripsi SSL 256-bit • Standar Privasi Biometrik
-              </ThemedText>
-            </View>
+            {formContent}
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -205,7 +214,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    alignItems: 'center',
   },
   scrollContent: {
     flexGrow: 1,
@@ -216,19 +224,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.five,
     paddingBottom: Spacing.five,
     gap: Spacing.three,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    letterSpacing: 0.4,
-    fontSize: 11,
   },
   heading: {
     marginTop: Spacing.three,
@@ -259,35 +254,6 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: Spacing.two,
   },
-  streakCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    borderRadius: 16,
-    padding: Spacing.three,
-  },
-  streakIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  streakCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  streakValue: {
-    alignItems: 'flex-end',
-  },
-  streakNumber: {
-    fontSize: 28,
-    lineHeight: 30,
-  },
-  streakLabel: {
-    fontSize: 10,
-    letterSpacing: 0.3,
-  },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -297,14 +263,72 @@ const styles = StyleSheet.create({
   footerLink: {
     fontWeight: '700',
   },
-  trustRow: {
+
+  // Web ≥880px: brand panel (left) + form card (right), per Figma "RagaKu v2 — Web".
+  safeAreaWide: {
+    flex: 1,
+  },
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  brandPanel: {
+    flex: 1,
+    maxWidth: 560,
+    justifyContent: 'center',
+    gap: Spacing.four,
+    paddingHorizontal: Spacing.six,
+    paddingVertical: Spacing.six,
+  },
+  brandLogoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: Spacing.two,
+    gap: 8,
   },
-  trustText: {
-    fontSize: 11,
+  brandLogoMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandLogoWord: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontFamily: FontFamily.bodyBold,
+    letterSpacing: 0.4,
+  },
+  brandLogoSuper: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodyBold,
+    color: 'rgba(255,255,255,0.85)',
+    marginLeft: -2,
+    marginTop: -8,
+  },
+  brandHeading: {
+    fontFamily: FontFamily.headingExtraBold,
+    fontSize: 34,
+    lineHeight: 38,
+    color: '#FFFFFF',
+  },
+  brandTagline: {
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 380,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  formColumn: {
+    flex: 1,
+  },
+  webFormContent: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.six,
+    gap: Spacing.three,
   },
 });

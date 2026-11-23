@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Disclaimer } from '@/components/disclaimer';
@@ -18,15 +18,33 @@ import { buildIndicators } from '@/lib/health';
 import type { MeasurementRecord } from '@/lib/model';
 import { storage } from '@/lib/storage';
 
+// Default angka manual yang wajar untuk dewasa, dipakai hanya saat belum ada record sama sekali.
+const MANUAL_DEFAULTS = { waistCm: 80, hipCm: 95, neckCm: 38, chestCm: 90, shoulderWidthCm: 44 };
+
 export default function UkuranScreen() {
   const theme = useTheme();
   const { profile } = useProfile();
   const [latest, setLatest] = useState<MeasurementRecord | null>(null);
-  const [neckCm, setNeckCm] = useState(38);
+
+  // Form ukuran manual — di-seed dari record terakhir (foto ATAU manual) kalau ada,
+  // supaya mengedit tidak mulai dari nol setiap kali.
+  const [waistCm, setWaistCm] = useState(MANUAL_DEFAULTS.waistCm);
+  const [hipCm, setHipCm] = useState(MANUAL_DEFAULTS.hipCm);
+  const [neckCm, setNeckCm] = useState(MANUAL_DEFAULTS.neckCm);
+  const [chestCm, setChestCm] = useState(MANUAL_DEFAULTS.chestCm);
+  const [shoulderWidthCm, setShoulderWidthCm] = useState(MANUAL_DEFAULTS.shoulderWidthCm);
 
   const load = useCallback(async () => {
     const list = await storage.getMeasurements();
-    setLatest(list.length ? list[list.length - 1] : null);
+    const record = list.length ? list[list.length - 1] : null;
+    setLatest(record);
+    if (record) {
+      setWaistCm(record.waistCm ?? MANUAL_DEFAULTS.waistCm);
+      setHipCm(record.hipCm ?? MANUAL_DEFAULTS.hipCm);
+      setNeckCm(record.neckCm ?? MANUAL_DEFAULTS.neckCm);
+      setChestCm(record.chestCm ?? MANUAL_DEFAULTS.chestCm);
+      setShoulderWidthCm(record.shoulderWidthCm ?? MANUAL_DEFAULTS.shoulderWidthCm);
+    }
   }, []);
 
   useFocusEffect(
@@ -34,6 +52,22 @@ export default function UkuranScreen() {
       void load();
     }, [load]),
   );
+
+  const saveManual = async () => {
+    const date = new Date().toISOString().slice(0, 10);
+    const next = await storage.upsertMeasurement({
+      date,
+      waistCm,
+      hipCm,
+      neckCm,
+      chestCm,
+      shoulderWidthCm,
+      // Pengukuran manual tidak menghasilkan panjang lengan — hanya model CV yang bisa.
+      armLengthCm: latest?.date === date ? latest.armLengthCm : null,
+      source: 'manual',
+    });
+    setLatest(next[next.length - 1]);
+  };
 
   const indicators = useMemo(() => {
     if (!latest?.waistCm) return null;
@@ -46,18 +80,51 @@ export default function UkuranScreen() {
     });
   }, [latest, profile.heightCm, profile.gender, neckCm]);
 
+  const resultTitle = latest
+    ? latest.source === 'manual'
+      ? `UKURAN MANUAL (${latest.date})`
+      : `HASIL ESTIMASI FOTO (${latest.date})`
+    : null;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
+          <Pressable onPress={() => router.push('/profil')} style={styles.backRow} hitSlop={8}>
+            <Ionicons name="chevron-back" size={18} color={theme.textSecondary} />
+            <ThemedText type="small" themeColor="textSecondary">
+              Kembali ke Profil
+            </ThemedText>
+          </Pressable>
           <View>
             <ThemedText type="small" themeColor="textSecondary" style={styles.eyebrow}>
               PENGUKURAN TUBUH
             </ThemedText>
             <ThemedText style={styles.title}>Ukuran & Indikator</ThemedText>
           </View>
+
+          {/* Jalur manual — selalu bisa dipakai, tidak butuh kamera atau backend CV aktif. */}
+          <Card style={styles.section}>
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
+              ISI UKURAN MANUAL
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Ukur dengan meteran kain lalu masukkan angkanya di sini. Lingkar pinggang wajib
+              diisi; lainnya opsional dan menambah indikator di bawah.
+            </ThemedText>
+            <NumberStepper label="Lingkar pinggang" value={waistCm} unit="cm" min={40} max={200} step={0.5} onChange={setWaistCm} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper label="Lingkar pinggul" value={hipCm} unit="cm" min={40} max={200} step={0.5} onChange={setHipCm} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper label="Lingkar leher" value={neckCm} unit="cm" min={20} max={60} step={0.5} onChange={setNeckCm} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper label="Lingkar dada" value={chestCm} unit="cm" min={50} max={200} step={0.5} onChange={setChestCm} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <NumberStepper label="Lebar bahu" value={shoulderWidthCm} unit="cm" min={25} max={80} step={0.5} onChange={setShoulderWidthCm} />
+            <PillButton label="Simpan ukuran" onPress={saveManual} />
+          </Card>
 
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
@@ -69,6 +136,7 @@ export default function UkuranScreen() {
             </ThemedText>
             <PillButton
               label={latest ? 'Ukur ulang dari foto' : 'Mulai pengukuran foto'}
+              variant="outline"
               onPress={() => router.push('/measurement')}
             />
           </Card>
@@ -76,7 +144,7 @@ export default function UkuranScreen() {
           {latest ? (
             <Card style={styles.section}>
               <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-                HASIL ESTIMASI ({latest.date})
+                {resultTitle}
               </ThemedText>
               <View style={styles.statRow}>
                 <StatTile label="Pinggang" value={fmt(latest.waistCm)} unit="cm" />
@@ -88,22 +156,6 @@ export default function UkuranScreen() {
               </View>
             </Card>
           ) : null}
-
-          {/* Neck entry needed for US Navy body fat */}
-          <Card style={styles.section}>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
-              LINGKAR LEHER (UNTUK ESTIMASI LEMAK)
-            </ThemedText>
-            <NumberStepper
-              label="Lingkar leher"
-              value={latest?.neckCm ?? neckCm}
-              unit="cm"
-              min={20}
-              max={60}
-              step={0.5}
-              onChange={setNeckCm}
-            />
-          </Card>
 
           {/* F4: advanced indicators */}
           {indicators ? (
@@ -133,12 +185,13 @@ export default function UkuranScreen() {
             <View style={[styles.infoBox, { backgroundColor: theme.background, borderColor: theme.border }]}>
               <Ionicons name="information-circle-outline" size={16} color={theme.textSecondary} />
               <ThemedText type="small" themeColor="textSecondary" style={styles.infoText}>
-                Lakukan pengukuran foto untuk melihat WHtR, WHR, dan estimasi lemak tubuh.
+                Isi ukuran manual atau lakukan pengukuran foto untuk melihat WHtR, WHR, dan
+                estimasi lemak tubuh.
               </ThemedText>
             </View>
           )}
 
-          <Disclaimer text="Semua ukuran dan indikator adalah estimasi, dipengaruhi kualitas foto. Bukan diagnosis medis." />
+          <Disclaimer text="Semua ukuran dan indikator adalah estimasi — baik dari foto maupun input manual. Bukan diagnosis medis." />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -182,7 +235,8 @@ function IndicatorRow({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safeArea: { flex: 1, alignItems: 'center' },
+  // Jangan tambah alignItems: 'center' di sini -- baca catatan MaxContentWidth di constants/theme.ts.
+  safeArea: { flex: 1 },
   scrollContent: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -192,10 +246,12 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   eyebrow: { letterSpacing: 0.6, textTransform: 'uppercase' },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   title: { fontFamily: FontFamily.headingBold, fontSize: 28, lineHeight: 32 },
   section: { gap: Spacing.three },
   sectionLabel: { letterSpacing: 0.4 },
   statRow: { flexDirection: 'row', gap: Spacing.two },
+  divider: { height: 1 },
   infoBox: {
     flexDirection: 'row',
     gap: 8,

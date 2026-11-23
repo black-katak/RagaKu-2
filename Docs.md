@@ -81,7 +81,16 @@ src/
     model.ts               # Tipe Profile, HealthScreening, MeasurementRecord, ProgressEntry
     storage.ts             # Lapisan AsyncStorage
     api.ts                 # Klien backend (healthSummary/plan/measure/deleteServerData)
-  constants/theme.ts       # Warna, font, spacing
+    auth.ts                # Auth lokal AsyncStorage (lihat Bagian 11)
+    firebase.ts            # Inisialisasi Firebase app + auth + Firestore (db)
+    mappers.ts             # Konversi snake_case API <-> camelCase Firestore (Bagian 14)
+  services/
+    userService.ts         # CRUD Firestore: profil & rencana latihan (Bagian 14)
+  types/
+    database.ts            # Tipe dokumen Firestore (Bagian 14)
+  constants/
+    theme.ts               # Warna, font, spacing
+    mockUser.ts            # MOCK_USER_ID sementara (belum ada Firebase Auth)
 ```
 
 ### Backend (`RagaKu-2-main/backend/`)
@@ -177,11 +186,17 @@ cd RagaKu-2-main
 npm install
 npx expo install @react-native-async-storage/async-storage expo-camera expo-image-picker  # sudah terpasang
 
+# Firebase (Firestore + Auth persistence) — lihat Bagian 14:
+npx expo install firebase @react-native-async-storage/async-storage   # sudah terpasang
+
 # Arahkan aplikasi ke backend:
 export EXPO_PUBLIC_API_URL="http://<IP-komputer-anda>:8000"   # bukan localhost untuk perangkat fisik
 
 npx expo start
 ```
+
+> Firestore butuh variabel `EXPO_PUBLIC_FIREBASE_*` di `.env` pada root frontend.
+> Lihat **Bagian 14** untuk daftar lengkap dan catatan keterbatasan.
 
 Fitur kamera (`expo-camera`) butuh **development build** di perangkat fisik
 (bukan Expo Go), karena berisi modul native. Lihat `AGENTS.md`.
@@ -439,8 +454,198 @@ BMI, rentang berat ideal, dan indikator **tidak** memerlukan backend (dihitung d
 ## 13. Catatan & Pertanyaan Terbuka
 
 - Standar BMI default: **Asia-Pasifik** (dapat diubah pengguna di Beranda) — sesuai PRD §12 #1.
-- Penyimpanan: **di perangkat** (AsyncStorage). Tidak ada akun/sinkronisasi cloud di MVP.
+- Penyimpanan: **di perangkat** (AsyncStorage) sebagai sumber kebenaran aplikasi.
+  Firestore kini dipakai sebagai lapisan **tulis-saja** untuk profil & rencana
+  latihan (lihat Bagian 14); belum ada sinkronisasi dua arah.
 - Model pengukuran memakai TensorFlow 1.13.1 (Python 3.6) — perlu Docker, pertimbangkan
   migrasi ke model pose modern (PRD §10) di iterasi berikutnya.
 - Audit lisensi komponen pihak ketiga wajib sebelum rilis publik (PRD §7).
 - Anggaran pemanggilan model & reviewer kesehatan masih terbuka (PRD §12).
+
+---
+
+## 14. Integrasi Firebase / Firestore
+
+Lapisan penyimpanan cloud untuk profil pengguna dan rencana latihan hasil AI.
+Statusnya **tulis-saja (write-only)**: aplikasi menulis ke Firestore, tetapi
+`ProfileProvider` masih membaca dari AsyncStorage. Tidak ada sinkronisasi balik.
+
+### 14.1 Instalasi
+
+```bash
+cd RagaKu-2-main
+npx expo install firebase @react-native-async-storage/async-storage
+```
+
+Versi yang terpasang saat dokumen ini ditulis: `firebase@13.0.0`,
+`@react-native-async-storage/async-storage@2.2.0`.
+
+`async-storage` dipakai dua kali: sebagai penyimpanan lokal aplikasi
+(`src/lib/storage.ts`, `src/lib/auth.ts`) **dan** sebagai backend persistensi
+sesi Firebase Auth di `src/lib/firebase.ts`.
+
+### 14.2 Variabel environment (frontend)
+
+Buat `.env` di root frontend. Semua kunci berprefiks `EXPO_PUBLIC_` karena
+dibaca di sisi klien (lihat `.env.examples`):
+
+| Variabel | Keterangan |
+|---|---|
+| `EXPO_PUBLIC_FIREBASE_API_KEY` | API key Web app Firebase |
+| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | mis. `<project>.firebaseapp.com` |
+| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | ID project Firebase |
+| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | mis. `<project>.appspot.com` |
+| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Sender ID FCM |
+| `EXPO_PUBLIC_FIREBASE_APP_ID` | App ID Web |
+
+`.env` sudah masuk `.gitignore` (baris `.env` dan `.env.*`). Jangan commit.
+
+> Catatan keamanan: config Firebase Web memang bukan rahasia, tetapi itu berarti
+> **Firestore Security Rules adalah satu-satunya pelindung data**. Lihat §14.7.
+
+### 14.3 Inisialisasi
+
+`src/lib/firebase.ts` mengekspor dua hal:
+
+- `auth` — `initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) })`
+- `db` — `getFirestore(app)`
+
+Pemakaian `getApps().length === 0 ? initializeApp(...) : getApp()` mencegah
+inisialisasi ganda saat Fast Refresh.
+
+### 14.4 Struktur dokumen Firestore
+
+```
+users/{uid}                                # profil pengguna
+users/{uid}/workoutPlans/{planId}          # rencana latihan harian
+users/{uid}/nutritionPlans/{planId}        # tipe sudah ada, service belum
+users/{uid}/measurements/{id}              # tipe sudah ada, service belum
+users/{uid}/progress/{id}                  # tipe sudah ada, service belum
+```
+
+Tipe ada di `src/types/database.ts`, dengan pemisahan:
+
+- `*Input` — payload yang dikirim pemanggil (tanpa field milik server).
+- `*Document` — bentuk tersimpan (termasuk `id`, `uid`, `createdAt`, `updatedAt`).
+
+Semua timestamp memakai `Timestamp` dari `firebase/firestore` (alias
+`StoredTimestamp`), diisi server lewat `serverTimestamp()`.
+
+`planId` default-nya `planDate` (`YYYY-MM-DD`), sehingga membuat ulang rencana
+di hari yang sama **menimpa** dokumen hari itu, bukan menambah dokumen baru.
+
+### 14.5 Layanan (`src/services/userService.ts`)
+
+| Fungsi | Perilaku |
+|---|---|
+| `saveUserProfile(uid, profile)` | `setDoc` merge ke `users/{uid}`; `createdAt` hanya saat dokumen baru |
+| `getUserProfile(uid)` | Mengembalikan dokumen, atau **`null`** bila tidak ada |
+| `saveWorkoutPlan(uid, plan, planId?)` | Tulis ke subkoleksi; mengembalikan `planId` |
+| `getUserWorkoutPlans(uid, { limit? })` | Urut `planDate` desc; `[]` bila kosong |
+
+Kegagalan Firestore dibungkus `UserServiceError` dengan `operation` dan error
+asli pada `cause`. Nilai `undefined` dibuang sebelum menulis (Firestore
+menolaknya); `null` dipertahankan sebagai "sengaja dikosongkan".
+
+### 14.6 Pemetaan data (`src/lib/mappers.ts`)
+
+Backend memakai snake_case, Firestore camelCase. Semua konversi ada di satu file.
+
+**Rencana AI → dokumen:**
+
+- `toWorkoutPlanInput(response, { calories? })`
+- `toNutritionPlanInput(response, { calories? })`
+- `toPlanInputs(response, opts)` — keduanya sekaligus
+- `date → planDate`, `duration_min → durationMin`, `protein_g → proteinG`
+
+`PlanResponse` hanya membawa `target_calories` dan `protein_g`, tidak cukup
+untuk `CalorieTargetSnapshot` (butuh `bmr`/`tdee`/`floor_applied`/`safe_floor`).
+Karena itu `targets` hanya terisi bila blok kalori dari
+`POST /api/v1/health-summary` dikirim lewat `options.calories`.
+
+**Onboarding → profil** (`toUserProfileInput`). Onboarding dan kontrak backend
+memakai kosakata yang **tidak sama**, jadi aturan berikut adalah keputusan baru:
+
+| Aturan | Keputusan | Alasan |
+|---|---|---|
+| `toBiologicalSex` | `'wanita' → 'female'`, lainnya → `'male'` | Rumus butuh biner; `'male'` punya batas kalori aman lebih tinggi (1500 vs 1200) sehingga aman untuk nilai tak diketahui |
+| `toCalorieGoal` | `'turun-berat' → 'lose'`; `'bentuk-otot'`/`'ketahanan' → 'gain'`; sisanya `'maintain'` | Goal onboarding multi-pilih, backend hanya satu. `'ketahanan'` di UI berlabel "Naikkan Berat Badan / Bulking" |
+| `toActivityLevel` | Dari `daysPerWeek`: ≤1 sedentary, ≤3 light, ≤5 active, >5 very_active | Onboarding tidak menanyakan tingkat aktivitas |
+| `screening` | Selalu `false` semua | Cedera onboarding (`'tekanan-tinggi'`, `'asma'`) adalah batasan latihan, bukan kontraindikasi. Memetakannya ke `hasChronicIllness` akan memicu gerbang PRD §7 dan membuat `/api/v1/plan` menjawab 409. `rencana.tsx` menanyakannya terpisah |
+| `bmiStandard` | `'asia_pacific'` | Default produk (PRD §12 #1) |
+
+### 14.7 Pengguna sementara (MOCK_USER_ID)
+
+`src/constants/mockUser.ts` mengekspor `MOCK_USER_ID = 'demo-user-ragaku'`.
+Semua tulisan Firestore memakai id ini karena **Firebase Auth belum terhubung**
+ke alur masuk — `src/lib/auth.ts` masih auth lokal AsyncStorage (Bagian 11).
+
+Konsekuensi: setiap instalasi aplikasi menulis ke dokumen yang sama, dan Rules
+tidak bisa memakai `request.auth.uid`. Untuk pengembangan, Rules bisa
+mengizinkan jalur demo itu saja:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // HANYA untuk demo lokal — ganti sebelum rilis.
+    match /users/demo-user-ragaku/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+> **Jangan dipakai di produksi.** Aturan di atas membuka dokumen demo ke publik.
+> Langkah berikutnya: sambungkan Firebase Auth, ganti `MOCK_USER_ID` dengan
+> `auth.currentUser.uid`, lalu pakai
+> `allow read, write: if request.auth != null && request.auth.uid == uid;`
+
+### 14.8 Titik integrasi di UI
+
+**`src/app/onboarding/activities.tsx`** (langkah 4/4, submit terakhir) —
+menyimpan profil sebelum masuk ke tab utama:
+
+```ts
+await saveUserProfile(MOCK_USER_ID, toUserProfileInput(data, {
+  displayName: session?.name,
+  email: session?.email,
+}));
+router.replace('/beranda');
+```
+
+Kegagalan menulis **menahan navigasi** dan menampilkan error, agar jawaban
+pengguna tidak hilang diam-diam.
+
+**`src/app/(tabs)/rencana.tsx`** — menyimpan rencana setelah dibuat:
+
+```ts
+const result = await api.plan(profile, screening);
+setPlan(result);                       // tampilkan dulu
+
+const summary = await api.healthSummary(profile, profile.bmiStandard);
+const { workout } = toPlanInputs(result, { calories: summary?.calories });
+await saveWorkoutPlan(MOCK_USER_ID, workout);
+```
+
+Urutannya sengaja: `setPlan` dijalankan **sebelum** penyimpanan. Gagal menulis
+ke Firestore hanya memunculkan catatan ("Rencana dibuat, tetapi gagal
+disimpan…"), bukan menghapus rencana yang sudah berhasil dibuat. Gagal mengambil
+`health-summary` diabaikan karena `targets` bersifat opsional.
+
+Catatan: nama metode klien adalah `api.plan(...)`, bukan `api.generatePlan(...)`.
+`api.healthSummary` bertipe `Promise<unknown>`, sehingga blok kalorinya perlu
+di-cast ke `WireCalorieTargets` (diekspor dari `mappers.ts`).
+
+### 14.9 Yang belum terverifikasi / belum ada
+
+- **Belum ada uji tulis nyata ke Firestore.** Yang terverifikasi baru
+  `npx tsc --noEmit` bersih. Perlu `.env` terisi dan Rules yang mengizinkan.
+- **Tidak ada pembacaan balik.** `getUserProfile`/`getUserWorkoutPlans` sudah
+  ada tetapi belum dipakai layar mana pun; `ProfileProvider` tetap AsyncStorage.
+- **`nutritionPlans`, `measurements`, `progress`** baru punya tipe, belum
+  punya fungsi service.
+- **Firebase Auth belum tersambung** (lihat §14.7).
+- Error TypeScript yang tersisa di repo (4 buah, rute `expo-router` di
+  `exercise.tsx`, `workout.tsx`, `active-session.tsx`) sudah ada sebelumnya dan
+  tidak berkaitan dengan integrasi ini.
