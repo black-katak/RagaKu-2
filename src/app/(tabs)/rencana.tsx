@@ -69,14 +69,34 @@ const SCREENING_QUESTIONS: { key: ScreeningKey; label: string; phrase: string }[
 
 type ErrorKind = 'rate_limit' | 'ai_failed' | 'conn';
 
+/** What the user asked the bot to put together. Undefined = the full daily plan. */
+type PlanTarget = 'exercises' | 'meals';
+
 type ChatMessage =
   | { id: string; role: 'assistant' | 'user'; kind: 'text'; text: string }
   | { id: string; role: 'assistant'; kind: 'screening_card' }
   | { id: string; role: 'assistant'; kind: 'loading'; text: string }
-  | { id: string; role: 'assistant'; kind: 'plan_card'; plan: PlanResponse }
+  | { id: string; role: 'assistant'; kind: 'plan_card'; plan: PlanResponse; focus?: PlanTarget }
   | { id: string; role: 'assistant'; kind: 'error_retry'; errorKind: ErrorKind; body: string }
-  | { id: string; role: 'assistant'; kind: 'screening_blocked'; text: string }
-  | { id: string; role: 'assistant'; kind: 'offer_generate'; text: string };
+  | { id: string; role: 'assistant'; kind: 'screening_blocked'; text: string };
+
+// Sent to the backend as `preferences` (treated as data, not instructions) so the answer
+// leads with what the user asked for. The backend caches per preference text, so tapping
+// the same button again the same day is answered from cache.
+const TARGET_PREFERENCES: Record<PlanTarget, string> = {
+  exercises: 'Fokus: susun program latihan hari ini.',
+  meals: 'Fokus: susun menu makan hari ini.',
+};
+const TARGET_USER_TEXT: Record<PlanTarget, string> = {
+  exercises: 'Susun latihan',
+  meals: 'Susun menu makan',
+};
+const TARGET_LOADING_TEXT: Record<PlanTarget, string> = {
+  exercises: 'Menyusun latihan hari ini... Biasanya di bawah 10 detik.',
+  meals: 'Menyusun menu makan hari ini... Biasanya di bawah 10 detik.',
+};
+const NEED_SCREENING_TEXT =
+  'Sebelum aku susun, jawab dulu penyaringan kesehatan lalu tekan "Lanjut".';
 
 /** "1843" -> "1.843" (id-ID thousands dot), without relying on Intl/full-icu. */
 function formatThousands(n: number): string {
@@ -92,7 +112,13 @@ function buildScreeningUserText(screening: HealthScreening): string {
   return `Saya ${checked[0]}, ${checked[1]}, dan ${checked[2]}.`;
 }
 
-function buildPlanSummaryText(plan: PlanResponse): string {
+function buildPlanSummaryText(plan: PlanResponse, target?: PlanTarget): string {
+  if (target === 'exercises') {
+    return `Siap. Ini susunan latihan hari ini (${plan.plan.exercises.length} sesi). Target harianmu ${formatThousands(plan.target_calories)} kkal.`;
+  }
+  if (target === 'meals') {
+    return `Siap. Ini menu makan hari ini, targetnya ${formatThousands(plan.target_calories)} kkal dan ${plan.protein_g} g protein.`;
+  }
   const firstEx = plan.plan.exercises[0];
   const exerciseText = firstEx ? `${firstEx.name} ${firstEx.duration_min} menit` : plan.plan.summary;
   return `Siap. Hari ini ${formatThousands(plan.target_calories)} kkal, ${exerciseText}. Mau aku susun apa dulu?`;
@@ -100,17 +126,19 @@ function buildPlanSummaryText(plan: PlanResponse): string {
 
 /**
  * Free-text input is NOT wired to a real LLM chat endpoint -- backend only
- * has POST /api/v1/plan (structured). Keyword-routes to the 3 quick actions;
- * honest fallback otherwise. See Docs.md backend API list.
+ * has POST /api/v1/plan (structured). Messages about exercise or food run the
+ * same request as the two quick-action buttons; the rest gets an honest fallback.
+ * See Docs.md backend API list.
  */
+function targetFromText(text: string): PlanTarget | null {
+  const lower = text.toLowerCase();
+  if (/olahraga|latihan|exercise/.test(lower)) return 'exercises';
+  if (/makan|menu|diet|gizi/.test(lower)) return 'meals';
+  return null;
+}
+
 function routeFreeText(text: string): string {
   const lower = text.toLowerCase();
-  if (/olahraga|latihan|exercise/.test(lower)) {
-    return 'Untuk itu, pakai tombol "Susun latihan" di atas kolom pesan ya.';
-  }
-  if (/makan|menu|diet|gizi/.test(lower)) {
-    return 'Untuk itu, pakai tombol "Susun menu makan" di atas kolom pesan ya.';
-  }
   if (/berat|progress|progres/.test(lower)) {
     return 'Catatan berat badan ada di tab Progres. Pakai tombol "Catat berat hari ini" di atas, atau buka tab Progres.';
   }
@@ -125,7 +153,6 @@ export default function RencanaScreen() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [screeningConfirmed, setScreeningConfirmed] = useState(false);
-  const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [composerText, setComposerText] = useState('');
 
@@ -133,7 +160,8 @@ export default function RencanaScreen() {
   const idCounter = useRef(0);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const screeningY = useRef(0);
-  const planY = useRef(0);
+  // What "Coba lagi" should re-run after a failed request.
+  const lastTarget = useRef<PlanTarget | undefined>(undefined);
 
   const blocked = screeningBlocked(screening);
 
@@ -160,30 +188,28 @@ export default function RencanaScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(screeningY.current - 16, 0), animated: true });
   };
 
-  // ponytail: scrolls to the top of the whole plan_card bubble rather than
-  // the exact exercises/meals sub-section inside it. Upgrade: give each
-  // Card inside PlanView its own onLayout offset if finer scroll is needed.
-  const scrollToPlan = () => {
-    scrollRef.current?.scrollTo({ y: Math.max(planY.current - 16, 0), animated: true });
-  };
-
-  const generate = async () => {
+  // Asks the backend (POST /api/v1/plan -> OpenRouter) for a plan. With a `target`
+  // the request leads with latihan or menu makan and only that part is shown.
+  const generate = async (target?: PlanTarget) => {
     if (isGenerating) return;
+    lastTarget.current = target;
     setIsGenerating(true);
     const loadingId = nextId();
-    setMessages((prev) => [...prev, { id: loadingId, role: 'assistant', kind: 'loading', text: LOADING_TEXT }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: loadingId, role: 'assistant', kind: 'loading', text: target ? TARGET_LOADING_TEXT[target] : LOADING_TEXT },
+    ]);
     try {
-      const result = await api.plan(profile, screening);
+      const result = await api.plan(profile, screening, target ? TARGET_PREFERENCES[target] : undefined);
       // Show the plan first — persistence must never gate the UI.
-      setPlan(result);
       const summaryId = nextId();
       const cardId = nextId();
       setMessages((prev) =>
         prev.flatMap((m) =>
           m.id === loadingId
             ? [
-                { id: summaryId, role: 'assistant' as const, kind: 'text' as const, text: buildPlanSummaryText(result) },
-                { id: cardId, role: 'assistant' as const, kind: 'plan_card' as const, plan: result },
+                { id: summaryId, role: 'assistant' as const, kind: 'text' as const, text: buildPlanSummaryText(result, target) },
+                { id: cardId, role: 'assistant' as const, kind: 'plan_card' as const, plan: result, focus: target },
               ]
             : [m],
         ),
@@ -248,35 +274,36 @@ export default function RencanaScreen() {
     scrollToScreening();
   };
 
-  const pushOfferGenerate = () => {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.kind === 'offer_generate') return prev;
-      return [
-        ...prev,
-        { id: nextId(), role: 'assistant', kind: 'offer_generate', text: 'Belum ada rencana untuk hari ini. Mau aku buatkan?' },
-      ];
-    });
-  };
+  // The user's message always shows up as a bubble, then the bot answers it:
+  // by asking the API, or by saying what is still needed first.
+  const askForTarget = (target: PlanTarget, userText: string) => {
+    if (isGenerating) return;
+    const addReply = (reply: ChatMessage) =>
+      setMessages((prev) => [...prev, { id: nextId(), role: 'user', kind: 'text', text: userText }, reply]);
 
-  const handleQuickAction = (target: 'exercises' | 'meals') => {
     if (!screeningConfirmed) {
+      // Safety gate (PRD §7): never generate before the screening is confirmed.
+      addReply({ id: nextId(), role: 'assistant', kind: 'text', text: NEED_SCREENING_TEXT });
       if (!isWideWeb) scrollToScreening();
       return;
     }
-    if (blocked) return; // already explained via the screening_blocked message
-    if (!plan) {
-      pushOfferGenerate();
+    if (blocked) {
+      addReply({ id: nextId(), role: 'assistant', kind: 'screening_blocked', text: SCREENING_BLOCKED_TEXT });
       return;
     }
-    scrollToPlan();
-    void target; // same bubble for both targets today; see ponytail note on scrollToPlan
+    setMessages((prev) => [...prev, { id: nextId(), role: 'user', kind: 'text', text: userText }]);
+    void generate(target);
   };
 
   const handleSend = () => {
     const text = composerText.trim();
     if (!text) return;
     setComposerText('');
+    const target = targetFromText(text);
+    if (target) {
+      askForTarget(target, text);
+      return;
+    }
     setMessages((prev) => [
       ...prev,
       { id: nextId(), role: 'user', kind: 'text', text },
@@ -305,10 +332,8 @@ export default function RencanaScreen() {
           isGenerating={isGenerating}
           onConfirmScreening={handleConfirmScreening}
           onEditScreening={handleEditScreening}
-          onRetry={generate}
-          onOfferGenerate={generate}
+          onRetry={() => void generate(lastTarget.current)}
           onLayoutScreening={(y) => (screeningY.current = y)}
-          onLayoutPlan={(y) => (planY.current = y)}
         />
       ))}
     </>
@@ -316,8 +341,8 @@ export default function RencanaScreen() {
 
   const quickChips = (
     <View style={styles.chipRow}>
-      <Chip label="Susun latihan" onPress={() => handleQuickAction('exercises')} />
-      <Chip label="Susun menu makan" onPress={() => handleQuickAction('meals')} />
+      <Chip label="Susun latihan" onPress={() => askForTarget('exercises', TARGET_USER_TEXT.exercises)} />
+      <Chip label="Susun menu makan" onPress={() => askForTarget('meals', TARGET_USER_TEXT.meals)} />
       <Chip label="Catat berat hari ini" onPress={() => router.push('/progress')} />
     </View>
   );
@@ -406,9 +431,7 @@ function MessageBubble({
   onConfirmScreening,
   onEditScreening,
   onRetry,
-  onOfferGenerate,
   onLayoutScreening,
-  onLayoutPlan,
 }: {
   message: ChatMessage;
   screening: HealthScreening;
@@ -418,9 +441,7 @@ function MessageBubble({
   onConfirmScreening: () => void;
   onEditScreening: () => void;
   onRetry: () => void;
-  onOfferGenerate: () => void;
   onLayoutScreening: (y: number) => void;
-  onLayoutPlan: (y: number) => void;
 }) {
   const theme = useTheme();
 
@@ -473,9 +494,9 @@ function MessageBubble({
 
   if (message.kind === 'plan_card') {
     return (
-      <View style={styles.bubbleRow} onLayout={(e) => onLayoutPlan(e.nativeEvent.layout.y)}>
+      <View style={styles.bubbleRow}>
         <View style={styles.cardSlot}>
-          <PlanView plan={message.plan} />
+          <PlanView plan={message.plan} focus={message.focus} />
         </View>
       </View>
     );
@@ -495,17 +516,6 @@ function MessageBubble({
             {message.text}
           </ThemedText>
           <PillButton label="Ubah jawaban penyaringan" variant="outline" onPress={onEditScreening} style={styles.stateButton} />
-        </View>
-      </View>
-    );
-  }
-
-  if (message.kind === 'offer_generate') {
-    return (
-      <View style={styles.bubbleRow}>
-        <View style={[styles.bubble, { backgroundColor: theme.backgroundElement, borderColor: theme.border, borderWidth: 1 }]}>
-          <ThemedText type="small">{message.text}</ThemedText>
-          <PillButton label="Buat rencana" loading={isGenerating} onPress={onOfferGenerate} style={styles.stateButton} />
         </View>
       </View>
     );
@@ -568,7 +578,7 @@ function ScreeningCard({
   );
 }
 
-function PlanView({ plan }: { plan: PlanResponse }) {
+function PlanView({ plan, focus }: { plan: PlanResponse; focus?: PlanTarget }) {
   const theme = useTheme();
   return (
     <>
@@ -598,7 +608,8 @@ function PlanView({ plan }: { plan: PlanResponse }) {
         </ThemedText>
       </Card>
 
-      {/* Exercises */}
+      {/* Exercises (hidden when the user only asked for the menu) */}
+      {focus !== 'meals' ? (
       <Card style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
           OLAHRAGA
@@ -624,8 +635,10 @@ function PlanView({ plan }: { plan: PlanResponse }) {
           </View>
         ))}
       </Card>
+      ) : null}
 
-      {/* Meals */}
+      {/* Meals (hidden when the user only asked for exercises) */}
+      {focus !== 'exercises' ? (
       <Card style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
           MENU MAKAN
@@ -648,6 +661,7 @@ function PlanView({ plan }: { plan: PlanResponse }) {
           </View>
         ))}
       </Card>
+      ) : null}
 
       {plan.plan.tips.length > 0 ? (
         <Card style={styles.section}>

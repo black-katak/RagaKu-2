@@ -5,7 +5,7 @@ model keamanan, serta pemetaan ke PRD untuk aplikasi **RagaKu**.
 
 - Versi dokumen: 0.1
 - Terkait: `PRD_RagaKu.md`
-- Komponen: frontend Expo (React Native, TypeScript) + backend FastAPI (Python) + layanan pengukuran computer vision (Docker)
+- Komponen: frontend Expo (React Native, TypeScript) + backend FastAPI (Python) + Google Gemini API (taksiran ukuran tubuh dari foto)
 
 ---
 
@@ -15,7 +15,9 @@ RagaKu membantu pengguna memahami kondisi tubuh dan merencanakan aktivitas serta
 makan sehari-hari. Tiga kemampuan inti:
 
 1. **Kalkulator berat ideal (BMI)** — dihitung di perangkat, bekerja tanpa internet.
-2. **Pengukuran tubuh dari foto** — foto dikirim ke backend, diproses oleh model CV, lalu dihapus.
+2. **Taksiran tubuh dari foto** — foto dikirim ke backend, diteruskan ke Google Gemini untuk
+   ditaksir (tinggi, berat, lingkar pinggang/pinggul/dada, lebar bahu, panjang lengan), dan tidak
+   disimpan di server RagaKu. Hasilnya taksiran, bukan pengukuran, dan ditinjau pengguna sebelum disimpan.
 3. **Rencana harian AI** — target kalori dihitung backend; model AI hanya menyusun rencana dalam JSON tervalidasi.
 
 Angka yang berkaitan dengan keselamatan (target kalori, batas minimum) selalu dihitung
@@ -31,15 +33,15 @@ di backend secara deterministik. Model AI **tidak pernah** menghitung kalori sen
 │                            │                          │                                │
 │  src/lib/health.ts  (BMI)  │                          │  app/services/health.py        │
 │  src/lib/storage.ts (lokal)│                          │  app/services/ai_plan.py       │
-│  src/lib/api.ts     (klien)│                          │  app/services/measurement.py   │
+│  src/lib/api.ts     (klien)│                          │  app/services/gemini_estimator │
 │  src/app/(tabs)/*          │                          │  app/main.py (router)          │
 └───────────────────────────┘                          └───────────────┬────────────────┘
                                                                         │
-                                           OpenRouter (chat/completions)│  subprocess/Docker
+                                           OpenRouter (chat/completions)│  Google GenAI API
                                                                         ▼
                                               ┌──────────────────────────────────────┐
                                               │ nvidia/nemotron-3-super-120b-a12b      │
-                                              │ Model pengukuran (TensorFlow 1.13.1)   │
+                                              │ Gemini (taksiran dari foto)            │
                                               └──────────────────────────────────────┘
 ```
 
@@ -103,12 +105,11 @@ app/
   services/
     health.py              # Perhitungan BMI/kalori/indikator deterministik
     ai_plan.py             # OpenRouter + validasi JSON + retry + cache harian
-    measurement.py         # Pembungkus model CV (subprocess) + hapus foto
-tests/test_smoke.py        # 10 uji tanpa jaringan/TensorFlow
-requirements.txt           # fastapi, uvicorn, pydantic, httpx, python-multipart
+    gemini_estimator.py    # Taksiran tinggi/berat & ukuran tubuh dari foto (Gemini, timeout + model cadangan)
+tests/test_smoke.py        # 15 uji tanpa jaringan
+requirements.txt           # fastapi, uvicorn, pydantic, httpx, python-multipart, google-genai
 .env.example               # Contoh variabel environment (server-only)
 Dockerfile                 # Container API FastAPI
-measurement.Dockerfile     # Container model pengukuran (TensorFlow 1.13.1)
 docker-compose.yml         # Orkestrasi layanan API
 ```
 
@@ -147,35 +148,14 @@ cd RagaKu-2-main/backend
 docker compose up --build          # membaca .env, mengekspos :8000
 ```
 
-### 4.3 Layanan pengukuran (model CV, TensorFlow 1.13.1)
+### 4.3 Taksiran dari foto (Gemini)
 
-Model berada di `Human-Body-Measurements-using-Computer-Vision-master/` dan butuh
-TensorFlow 1.13.1, sehingga dibungkus Docker (PRD §8).
+Tidak ada layanan tambahan (model CV/Docker sudah dihapus). Isi `GEMINI_API_KEY` di
+`backend/.env`; endpoint `/api/v1/measure` dan `/api/v1/estimate-body` memanggil Gemini
+langsung. Tiap model diberi batas 20 detik, lalu server mencoba `GEMINI_FALLBACK_MODEL`.
 
-```bash
-# Build dari ROOT repositori model (bukan folder backend):
-cd Human-Body-Measurements-using-Computer-Vision-master
-docker build -f ../RagaKu-2-main/backend/measurement.Dockerfile -t ragaku-measure .
-```
-
-Pastikan model pra-latih tersedia (lihat README model):
-
-```bash
-wget https://people.eecs.berkeley.edu/~kanazawa/cachedir/hmr/models.tar.gz
-tar -xf models.tar.gz   # ke folder models/
-# + unduh customBodyPoints.txt ke folder data/
-```
-
-Hubungkan ke backend lewat environment `MEASUREMENT_COMMAND` (template dengan
-placeholder `{image}` dan `{height}`):
-
-```bash
-export MEASUREMENT_COMMAND="docker run --rm -v /tmp:/tmp ragaku-measure python3 inference.py -i {image} -ht {height}"
-```
-
-> Catatan: integrasi pengukuran adalah Fase 2 (PRD §11). Jika `MEASUREMENT_COMMAND`
-> kosong, endpoint `/api/v1/measure` mengembalikan `503 measurement_failed` secara
-> ramah, dan aplikasi tetap berjalan untuk fitur BMI dan rencana AI.
+> Catatan: jika `GEMINI_API_KEY` kosong atau kedua model sibuk, kedua endpoint mengembalikan
+> **503** dengan pesan ramah, dan fitur BMI serta rencana AI tetap berjalan.
 
 ### 4.4 Frontend (Expo)
 
@@ -217,7 +197,7 @@ Base URL default: `http://localhost:8000`. Semua body JSON kecuali `/measure` (m
 ### `GET /health`
 Liveness + status konfigurasi.
 ```json
-{ "status": "ok", "version": "0.1.0", "ai_configured": "true", "measurement_configured": "false" }
+{ "status": "ok", "version": "0.1.0", "ai_configured": "true", "gemini_configured": "true" }
 ```
 
 ### `POST /api/v1/health-summary?standard=asia_pacific|who`
@@ -279,18 +259,25 @@ Rencana harian AI dengan gerbang penyaringan kesehatan. (F5 + §7)
 ```
 
 ### `POST /api/v1/measure` (multipart/form-data)
-Pengukuran dari foto. (F3)
-- Field: `height_cm` (form), `gender` (form), `photo` (file).
-- Foto dihapus dari server setelah diproses.
-- Belum terkonfigurasi → **503** `measurement_failed`. Timeout → **504**.
+Taksiran ukuran tubuh dari foto lewat Gemini. (F3)
+- Field: `photo` (file JPEG/PNG/WebP, maks 10 MB), `height_cm` (form, 100–240, default 170), `gender` (form, `male`/`female`).
+- Foto hanya diteruskan ke Google Gemini dan tidak disimpan di server RagaKu.
+- Nilai di luar rentang wajar dibuang (menjadi `null`, bukan dipaksa ke angka karangan) dan
+  `confidence` diturunkan ke `low`. Aplikasi tidak mengizinkan menyimpan hasil `low` atau tanpa lingkar pinggang.
+- Kunci belum diisi atau model sibuk → **503**. Format foto salah → **415**, foto kosong → **400**, terlalu besar → **413**.
 ```json
 {
   "waist_cm": 82.3, "hip_cm": 95.0, "arm_length_cm": 58.0,
   "shoulder_width_cm": 44.0, "chest_cm": 90.0,
   "confidence": "medium", "warnings": [],
-  "note": "Hasil adalah estimasi dari foto. Foto asli dihapus setelah diproses."
+  "note": "Hasil adalah taksiran AI dari satu foto, bukan pengukuran. Foto dikirim ke Google Gemini untuk diproses dan tidak disimpan di server RagaKu."
 }
 ```
+
+### `POST /api/v1/estimate-body` (multipart/form-data)
+Taksiran tinggi dan berat badan dari foto (kartu "Isi tinggi dan berat dari foto" di Profil).
+- Field: `photo` (file). Respons: `{ "height_cm", "weight_kg", "confidence", "warnings" }`.
+- Hasilnya hanya mengisi form Profil; tersimpan setelah pengguna menekan "Simpan perubahan".
 
 ### `DELETE /api/v1/data`
 Membersihkan cache sisi-server (cache rencana harian). Data utama ada di perangkat. (§7)
@@ -355,8 +342,9 @@ Lihat `backend/.env.example`.
 | `OPENROUTER_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Model yang dipakai. |
 | `OPENROUTER_TIMEOUT_SECONDS` | `90` | Timeout panggilan (PRD §8). |
 | `AI_MAX_RETRIES` | `1` | Jumlah percobaan ulang validasi JSON. |
-| `MEASUREMENT_COMMAND` | (kosong) | Template perintah pengukuran dengan `{image}`/`{height}`. |
-| `MEASUREMENT_TIMEOUT_SECONDS` | `120` | Timeout proses pengukuran. |
+| `GEMINI_API_KEY` | (kosong) | Kunci Gemini. Wajib untuk taksiran dari foto. |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Model utama (batas 20 detik per model). |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | Dipakai bila model utama sibuk/lambat. Kosongkan untuk menonaktifkan. |
 | `CORS_ALLOW_ORIGINS` | `*` | Daftar origin yang diizinkan. |
 
 Frontend: `EXPO_PUBLIC_API_URL` menentukan base URL backend.
@@ -369,16 +357,16 @@ Frontend: `EXPO_PUBLIC_API_URL` menentukan base URL backend.
 |---|---|---|
 | F1 Profil pengguna | ✅ | `beranda.tsx`, `profile-context.tsx`, `storage.ts` |
 | F2 Kalkulator BMI (WHO + Asia-Pasifik + rentang ideal) | ✅ | `beranda.tsx`, `health.ts`, `/health-summary` |
-| F3 Pengukuran dari foto | ✅ (butuh container model aktif) | `measurement.tsx`, `/measure`, `measurement.py` |
+| F3 Taksiran ukuran dari foto | ✅ (butuh `GEMINI_API_KEY`) | `measurement.tsx`, `/measure`, `gemini_estimator.py` |
 | F4 Indikator lanjutan (WHtR/WHR/US Navy) | ✅ | `ukuran.tsx`, `health.ts`, `/indicators` |
 | F5 Rencana harian AI | ✅ (teruji live) | `rencana.tsx`, `ai_plan.py`, `/plan` |
 | F6 Pelacakan progres | ✅ | `progress.tsx`, `storage.ts` |
 | F7 Pengingat | ⬜ Belum (roadmap Fase 3) | — |
 | §7 Keamanan/privasi/kesehatan | ✅ | lihat Bagian 7 di atas |
-| §8 Persyaratan teknis | ✅ | FastAPI, Pydantic, Docker, timeout 90s, offline BMI |
+| §8 Persyaratan teknis | ✅ | FastAPI, Pydantic, timeout 90s (rencana) / 20s per model (foto), offline BMI |
 
 Fase MVP (PRD §11): F1, F2, F5 — lengkap. Fase 2: F3, F4 — lengkap di sisi aplikasi &
-API; integrasi model pengukuran siap dihubungkan via `MEASUREMENT_COMMAND`.
+API; taksiran ukuran dari foto memakai Gemini (tanpa model CV/Docker).
 
 ---
 
@@ -457,8 +445,9 @@ BMI, rentang berat ideal, dan indikator **tidak** memerlukan backend (dihitung d
 - Penyimpanan: **di perangkat** (AsyncStorage) sebagai sumber kebenaran aplikasi.
   Firestore kini dipakai sebagai lapisan **tulis-saja** untuk profil & rencana
   latihan (lihat Bagian 14); belum ada sinkronisasi dua arah.
-- Model pengukuran memakai TensorFlow 1.13.1 (Python 3.6) — perlu Docker, pertimbangkan
-  migrasi ke model pose modern (PRD §10) di iterasi berikutnya.
+- Model CV (TensorFlow 1.13.1) sudah dihapus; ukuran dari foto kini taksiran Gemini. Akurasinya
+  terbatas (satu foto, pakaian, sudut), jadi selalu dilabeli taksiran dan ditinjau pengguna.
+  Foto diteruskan ke Google, jadi persetujuan pengguna dan kebijakan privasi perlu menyebut hal ini (PRD §7).
 - Audit lisensi komponen pihak ketiga wajib sebelum rilis publik (PRD §7).
 - Anggaran pemanggilan model & reviewer kesehatan masih terbuka (PRD §12).
 

@@ -34,7 +34,7 @@ export interface MeasurementRecord {
   shoulderWidthCm?: number | null;
   chestCm?: number | null;
   neckCm?: number | null; // user-entered, needed for US Navy body fat
-  /** Asal angka: dari foto (model CV) atau diisi manual. Default 'photo' untuk record lama. */
+  /** Asal angka: dari foto (taksiran Gemini) atau diisi manual. Default 'photo' untuk record lama. */
   source?: 'photo' | 'manual';
 }
 

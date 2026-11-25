@@ -5,6 +5,7 @@ import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/components/auth-context';
+import { BodyEstimateCard } from '@/components/body-estimate-card';
 import { useProfile } from '@/components/profile-context';
 import { Disclaimer } from '@/components/disclaimer';
 import { ThemedText } from '@/components/themed-text';
@@ -73,6 +74,13 @@ export default function ProfilScreen() {
     setSaved(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setSaved(false), 4000);
+  };
+
+  // Taksiran Gemini hanya mengisi form di atas; tersimpan setelah "Simpan perubahan".
+  const applyEstimate = (estimatedHeightCm: number, estimatedWeightKg: number) => {
+    dismissBanner();
+    setHeightCm(Math.round(estimatedHeightCm));
+    setWeightKg(Math.round(estimatedWeightKg * 2) / 2);
   };
 
   // UKURAN TUBUH — lingkar leher dipakai untuk estimasi lemak tubuh (US Navy),
@@ -218,6 +226,8 @@ export default function ProfilScreen() {
 
         <PillButton label="Simpan perubahan" onPress={handleSaveProfile} />
       </Card>
+
+      <BodyEstimateCard onApply={applyEstimate} />
     </>
   );
 
@@ -248,8 +258,8 @@ export default function ProfilScreen() {
           onPress={() => router.push('/measurement')}
         />
         <ThemedText type="small" themeColor="primaryDark">
-          Foto dikirim lewat koneksi aman, diproses, lalu dihapus dari server. Hanya angka ukuran
-          yang disimpan.
+          Foto diteruskan ke Google Gemini untuk ditaksir dan tidak disimpan di server RagaKu.
+          Hanya angka ukuran yang disimpan di perangkatmu.
         </ThemedText>
 
         <ThemedText

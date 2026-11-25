@@ -41,10 +41,9 @@ export default function MeasurementScreen() {
     } catch (e) {
       setPhase('capture');
       if (e instanceof ApiError) {
-        if (e.status === 0) setError('Tidak dapat terhubung ke server pengukuran.');
-        else if (e.status === 503) setError('Layanan pengukuran belum aktif di server.');
-        else if (e.status === 504) setError('Proses melebihi batas waktu. Coba foto lagi.');
-        else setError(e.message);
+        // The message already says what happened: unreachable server (with the address and
+        // reason), Gemini busy (503), timeout (504), unsupported or empty photo, ...
+        setError(e.message);
       } else {
         setError('Terjadi kesalahan tak terduga.');
       }
@@ -59,7 +58,7 @@ export default function MeasurementScreen() {
 
   const pickFromLibrary = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      mediaTypes: ['images'],
       quality: 0.7,
     });
     if (!result.canceled && result.assets[0]?.uri) {
@@ -67,8 +66,13 @@ export default function MeasurementScreen() {
     }
   };
 
+  // Gemini marks a photo "low" when it could not see the body well enough (loose clothes,
+  // cropped legs, ...) or returned no waist value. Saving that would store a guess as a
+  // measurement, so the review screen only lets a usable result through.
+  const canSave = pendingResult != null && pendingResult.confidence !== 'low' && pendingResult.waist_cm != null;
+
   const saveResult = async () => {
-    if (!pendingResult) return;
+    if (!pendingResult || !canSave) return;
     await storage.upsertMeasurement({
       date: new Date().toISOString().slice(0, 10),
       waistCm: pendingResult.waist_cm,
@@ -84,7 +88,7 @@ export default function MeasurementScreen() {
   const retake = () => {
     setPendingResult(null);
     setError(null);
-    setPhase('consent');
+    setPhase(permission?.granted ? 'capture' : 'consent');
   };
 
   // --- Result review (hasil_pengukuran.md: explicit "Simpan hasil" before save) ---
@@ -110,7 +114,7 @@ export default function MeasurementScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <ThemedText style={styles.title}>HASIL PENGUKURAN</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-              Dihitung dari satu foto. Angka bersifat estimasi.
+              Taksiran AI dari satu foto, bukan pengukuran dengan meteran.
             </ThemedText>
 
             <View style={styles.statRow}>
@@ -118,20 +122,44 @@ export default function MeasurementScreen() {
               <StatTile label="Lingkar pinggul" value={fmt(pendingResult.hip_cm)} unit="cm" />
             </View>
             <View style={styles.statRow}>
+              <StatTile label="Lingkar dada" value={fmt(pendingResult.chest_cm)} unit="cm" />
+              <StatTile label="Lebar bahu" value={fmt(pendingResult.shoulder_width_cm)} unit="cm" />
+            </View>
+            <View style={styles.statRow}>
+              <StatTile label="Panjang lengan" value={fmt(pendingResult.arm_length_cm)} unit="cm" />
               <StatTile
                 label="Rasio pinggang-tinggi"
                 value={indicators ? indicators.whtr.toFixed(2) : '–'}
                 unit="WHtR"
               />
-              <StatTile label="Lebar bahu" value={fmt(pendingResult.shoulder_width_cm)} unit="cm" />
             </View>
 
+            {pendingResult.warnings.length > 0 ? (
+              <View style={[styles.errorBox, { borderColor: theme.warning }]}>
+                <Ionicons name="warning-outline" size={16} color={theme.warning} />
+                <View style={styles.warningList}>
+                  {pendingResult.warnings.map((w) => (
+                    <ThemedText key={w} type="small" style={{ color: theme.warning }}>
+                      {w}
+                    </ThemedText>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {!canSave ? (
+              <ThemedText type="small" style={styles.privacyNote}>
+                Keyakinan hasil rendah, jadi belum bisa disimpan. Coba foto lagi: seluruh tubuh
+                terlihat, pakaian pas badan, cahaya merata.
+              </ThemedText>
+            ) : null}
+
             <ThemedText type="small" style={styles.privacyNote}>
-              Fotonya sudah dihapus dari server. Hanya angka di atas yang disimpan di
-              perangkatmu.
+              Foto diproses oleh Google Gemini dan tidak disimpan di server RagaKu. Hanya angka di
+              atas yang disimpan di perangkatmu.
             </ThemedText>
 
-            <PillButton label="Simpan hasil" onPress={saveResult} />
+            <PillButton label="Simpan hasil" disabled={!canSave} onPress={saveResult} />
             <PillButton label="Ukur ulang" variant="outline" onPress={retake} />
           </ScrollView>
         </SafeAreaView>
@@ -168,8 +196,8 @@ export default function MeasurementScreen() {
                 PRIVASI
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Foto dikirim lewat HTTPS, diproses untuk menghitung ukuran, lalu dihapus dari
-                server. Hanya angka cm yang disimpan.
+                Fotomu diteruskan lewat server RagaKu ke Google Gemini untuk ditaksir ukurannya.
+                Server RagaKu tidak menyimpan foto. Hanya angka cm yang disimpan di perangkatmu.
               </ThemedText>
             </Card>
 
@@ -185,7 +213,7 @@ export default function MeasurementScreen() {
                 {consented ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
               </View>
               <ThemedText type="small" style={styles.consentText}>
-                Saya mengerti dan setuju fotoku diproses lalu dihapus dari server.
+                Saya mengerti dan setuju fotoku dikirim ke Google Gemini untuk diproses.
               </ThemedText>
             </Pressable>
 
@@ -364,6 +392,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
     gap: Spacing.two,
   },
+  warningList: { flex: 1, gap: 4 },
   errorBox: {
     flexDirection: 'row',
     gap: 8,

@@ -1,1 +1,1 @@
-"""Service layer: health calculations, AI planning, measurement wrapper."""
+"""Service layer: health calculations, AI planning, Gemini body estimation."""

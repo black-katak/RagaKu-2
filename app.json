@@ -42,7 +42,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "RagaKu memerlukan akses kamera untuk mengambil foto pengukuran tubuh. Foto diproses lalu dihapus dari server."
+          "cameraPermission": "RagaKu memerlukan akses kamera untuk mengambil foto pengukuran tubuh. Foto diteruskan ke Google Gemini untuk ditaksir dan tidak disimpan di server RagaKu."
         }
       ],
       [

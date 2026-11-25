@@ -38,15 +38,7 @@ class Settings:
         )
         self.openrouter_title: str = os.getenv("OPENROUTER_APP_TITLE", "RagaKu")
 
-        # --- Measurement service (CV model) ---
-        # When set, the measurement endpoint shells out to this command,
-        # typically a Docker container wrapping TensorFlow 1.13.1.
-        self.measurement_command: str = os.getenv("MEASUREMENT_COMMAND", "")
-        self.measurement_timeout_seconds: float = float(
-            os.getenv("MEASUREMENT_TIMEOUT_SECONDS", "120")
-        )
-
-        # --- Gemini body estimation (F3: height/weight from photo) ---
+        # --- Gemini body estimation (F3: height, weight and body measurements from a photo) ---
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         # Tried when the primary model is overloaded (HTTP 503/429). Leave

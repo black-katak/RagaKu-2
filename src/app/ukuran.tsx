@@ -62,7 +62,7 @@ export default function UkuranScreen() {
       neckCm,
       chestCm,
       shoulderWidthCm,
-      // Pengukuran manual tidak menghasilkan panjang lengan — hanya model CV yang bisa.
+      // Pengukuran manual tidak menghasilkan panjang lengan — hanya taksiran foto (Gemini) yang bisa.
       armLengthCm: latest?.date === date ? latest.armLengthCm : null,
       source: 'manual',
     });
@@ -92,7 +92,7 @@ export default function UkuranScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six }]}
           showsVerticalScrollIndicator={false}>
-          <Pressable onPress={() => router.push('/profil')} style={styles.backRow} hitSlop={8}>
+          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/profil'))} style={styles.backRow} hitSlop={8}>
             <Ionicons name="chevron-back" size={18} color={theme.textSecondary} />
             <ThemedText type="small" themeColor="textSecondary">
               Kembali ke Profil
@@ -105,7 +105,7 @@ export default function UkuranScreen() {
             <ThemedText style={styles.title}>Ukuran & Indikator</ThemedText>
           </View>
 
-          {/* Jalur manual — selalu bisa dipakai, tidak butuh kamera atau backend CV aktif. */}
+          {/* Jalur manual — selalu bisa dipakai, tidak butuh kamera atau backend aktif. */}
           <Card style={styles.section}>
             <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionLabel}>
               ISI UKURAN MANUAL
@@ -131,8 +131,8 @@ export default function UkuranScreen() {
               PENGUKURAN DARI FOTO
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Ambil satu foto seluruh tubuh dari depan. Foto dikirim melalui koneksi aman,
-              diproses, lalu dihapus dari server. Hanya angka ukuran yang disimpan.
+              Ambil satu foto seluruh tubuh dari depan. Foto diteruskan ke Google Gemini untuk
+              ditaksir dan tidak disimpan di server RagaKu. Hanya angka ukuran yang disimpan.
             </ThemedText>
             <PillButton
               label={latest ? 'Ukur ulang dari foto' : 'Mulai pengukuran foto'}

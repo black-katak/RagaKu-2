@@ -5,7 +5,8 @@ Endpoints:
   POST /api/v1/health-summary   -> BMI + ideal weight + calorie targets (F2/F5 calc)
   POST /api/v1/indicators       -> WHtR / WHR / US Navy body fat (F4)
   POST /api/v1/plan             -> AI daily plan (F5) with screening gate (section 7)
-  POST /api/v1/measure          -> body measurement from photo (F3)
+  POST /api/v1/measure          -> body measurements from a photo, estimated by Gemini (F3)
+  POST /api/v1/estimate-body    -> height and weight from a photo, estimated by Gemini (F3)
   DELETE /api/v1/data           -> clear server-side cached data (section 7)
 """
 from __future__ import annotations
@@ -23,10 +24,11 @@ from app.schemas import (
     HealthSummary,
     IndicatorRequest,
     IndicatorResult,
+    MeasurementResult,
     PlanRequest,
     PlanResponse,
 )
-from app.services import ai_plan, gemini_estimator, health, measurement
+from app.services import ai_plan, gemini_estimator, health
 
 app = FastAPI(title="RagaKu API", version=__version__)
 
@@ -50,7 +52,7 @@ def liveness() -> dict[str, str]:
         "status": "ok",
         "version": __version__,
         "ai_configured": str(settings.openrouter_configured).lower(),
-        "measurement_configured": str(bool(settings.measurement_command)).lower(),
+        "gemini_configured": str(bool(settings.gemini_api_key)).lower(),
     }
 
 
@@ -105,40 +107,13 @@ async def daily_plan(
     )
 
 
-@app.post("/api/v1/measure")
-async def measure(
-    height_cm: float = Form(...),
-    gender: Gender = Form(Gender.male),
-    photo: UploadFile = File(...),
-    settings: Settings = Depends(get_settings),
-) -> JSONResponse:
-    image_bytes = await photo.read()
-    suffix = ""
-    if photo.filename and "." in photo.filename:
-        suffix = "." + photo.filename.rsplit(".", 1)[-1]
-    try:
-        result = await measurement.run_measurement(
-            settings, image_bytes, height_cm, suffix or ".jpg"
-        )
-    except measurement.MeasurementError as exc:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"error": "measurement_failed", "detail": exc.message},
-        )
-    return JSONResponse(status_code=200, content=result.model_dump())
-
-
-# Body estimation upload limits (F3). No max-size setting exists yet.
+# Photo upload limits (F3). No max-size setting exists yet.
 _ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
-@app.post("/api/v1/estimate-body", response_model=BodyEstimateResult)
-async def estimate_body(
-    photo: UploadFile = File(...),
-    settings: Settings = Depends(get_settings),
-) -> BodyEstimateResult | JSONResponse:
-    """Estimate height and weight from a photo using Gemini.
+async def _read_photo(photo: UploadFile) -> tuple[bytes, str] | JSONResponse:
+    """Validate an uploaded photo and return `(bytes, mime_type)`, or an error response.
 
     The image is handled purely in memory: no temp file is created, so there is
     nothing to clean up afterwards (PRD section 7).
@@ -154,6 +129,11 @@ async def estimate_body(
         )
 
     image_bytes = await photo.read()
+    if not image_bytes:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "empty_photo", "detail": "File foto kosong."},
+        )
     if len(image_bytes) > _MAX_IMAGE_BYTES:
         return JSONResponse(
             status_code=413,
@@ -162,6 +142,45 @@ async def estimate_body(
                 "detail": "Ukuran foto maksimal 10 MB.",
             },
         )
+    return image_bytes, mime_type
+
+
+@app.post("/api/v1/measure", response_model=MeasurementResult)
+async def measure(
+    photo: UploadFile = File(...),
+    height_cm: float = Form(170.0),
+    gender: str = Form("male"),
+    settings: Settings = Depends(get_settings),
+) -> MeasurementResult | JSONResponse:
+    """Estimate body measurements from a photo using Gemini.
+
+    `height_cm` and `gender` give the model a real scale reference. Out-of-range
+    values are replaced by sane defaults instead of failing the request.
+    """
+    photo_data = await _read_photo(photo)
+    if isinstance(photo_data, JSONResponse):
+        return photo_data
+    image_bytes, mime_type = photo_data
+
+    height = height_cm if 100.0 <= height_cm <= 240.0 else 170.0
+    gender_enum = (
+        Gender.female if gender.strip().lower() in ("female", "wanita") else Gender.male
+    )
+    return await gemini_estimator.estimate_measurements(
+        settings, image_bytes, mime_type, height, gender_enum
+    )
+
+
+@app.post("/api/v1/estimate-body", response_model=BodyEstimateResult)
+async def estimate_body(
+    photo: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+) -> BodyEstimateResult | JSONResponse:
+    """Estimate height and weight from a photo using Gemini."""
+    photo_data = await _read_photo(photo)
+    if isinstance(photo_data, JSONResponse):
+        return photo_data
+    image_bytes, mime_type = photo_data
 
     return await gemini_estimator.estimate_body(settings, image_bytes, mime_type)
 

@@ -114,6 +114,9 @@ function RootNavigator() {
 
       <Stack.Protected guard={signedIn && completed}>
         <Stack.Screen name="(tabs)" />
+        {/* Bukan tab: sejak Expo Router SDK 58, route di dalam (tabs) yang tidak dideklarasikan
+            sebagai tab dialihkan ke /beranda, jadi layar ini ada di Stack root. */}
+        <Stack.Screen name="ukuran" />
         <Stack.Screen name="measurement" options={{ presentation: 'fullScreenModal' }} />
       </Stack.Protected>
     </Stack>

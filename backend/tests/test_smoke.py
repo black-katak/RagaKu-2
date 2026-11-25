@@ -1,4 +1,4 @@
-"""Smoke tests for RagaKu backend logic (no network, no TensorFlow).
+"""Smoke tests for RagaKu backend logic (no network calls).
 
 Run with: python -m backend.tests.test_smoke   (from RagaKu-2-main)
 or:        python tests/test_smoke.py           (from backend/)
@@ -6,23 +6,29 @@ Also importable by pytest.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
+import types as pytypes
 
 # Allow running directly from the backend/ directory.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from fastapi import HTTPException  # noqa: E402
+
 from app.schemas import (  # noqa: E402
     ActivityLevel,
     BmiStandard,
+    BodyEstimateResult,
     DailyPlan,
     Gender,
     Goal,
     IndicatorRequest,
+    MeasurementEstimate,
     PlanRequest,
     Profile,
 )
-from app.services import ai_plan, health, measurement  # noqa: E402
+from app.services import ai_plan, gemini_estimator, health  # noqa: E402
 
 
 def _profile(**kw) -> Profile:
@@ -127,19 +133,92 @@ def test_screening_gate_blocks():
     assert req.screening.blocked is True
 
 
-def test_measurement_output_parsing():
-    stdout = (
-        "height: 175.000000\n"
-        "waist: 82.3\n"
-        "hips: 95.0\n"
-        "arm length: 58.0\n"
-        "shoulder width: 44.0\n"
-        "chest: 90.0\n"
+def test_measurement_limits_keep_plausible_values():
+    est = MeasurementEstimate(
+        waist_cm=82.34, hip_cm=95.0, chest_cm=90.0, shoulder_width_cm=44.0,
+        arm_length_cm=58.0, confidence="medium", warnings=[],
     )
-    values = measurement.parse_model_output(stdout)
-    assert values["waist_cm"] == 82.3
-    assert values["hip_cm"] == 95.0
-    assert values["arm_length_cm"] == 58.0
+    out = gemini_estimator._apply_measurement_limits(est)
+    assert out.waist_cm == 82.3 and out.hip_cm == 95.0
+    assert out.confidence == "medium" and out.warnings == []
+
+
+def test_measurement_limits_drop_implausible_value_and_force_low():
+    est = MeasurementEstimate(
+        waist_cm=500.0, hip_cm=95.0, chest_cm=90.0, shoulder_width_cm=44.0,
+        arm_length_cm=58.0, confidence="high",
+    )
+    out = gemini_estimator._apply_measurement_limits(est)
+    assert out.waist_cm is None            # never clamped to an invented number
+    assert out.hip_cm == 95.0
+    assert out.confidence == "low"
+    assert any("pinggang" in w.lower() for w in out.warnings)
+
+
+def test_measurement_limits_missing_waist_forces_low():
+    est = MeasurementEstimate(hip_cm=95.0, confidence="high")
+    out = gemini_estimator._apply_measurement_limits(est)
+    assert out.confidence == "low"
+    assert any("pinggang" in w.lower() for w in out.warnings)
+
+
+def test_measurement_limits_nothing_estimated():
+    out = gemini_estimator._apply_measurement_limits(MeasurementEstimate(confidence="high"))
+    assert out.confidence == "low"
+    assert all(getattr(out, f) is None for f in ("waist_cm", "hip_cm", "chest_cm"))
+
+
+def _fake_settings():
+    return pytypes.SimpleNamespace(
+        gemini_api_key="x", gemini_model="utama", gemini_fallback_model="cadangan"
+    )
+
+
+def _run_with_fake_gemini(hang_models, call):
+    """Run `call()` with a Gemini client whose `hang_models` never answer."""
+    calls: list[str] = []
+
+    class Models:
+        async def generate_content(self, model, contents, config):
+            calls.append(model)
+            if model in hang_models:
+                await asyncio.sleep(3600)   # a stalled upstream
+            return pytypes.SimpleNamespace(
+                parsed=BodyEstimateResult(
+                    height_cm=170, weight_kg=65, confidence="medium", warnings=[]
+                )
+            )
+
+    class Client:
+        def __init__(self, api_key):
+            self.aio = pytypes.SimpleNamespace(models=Models())
+
+    saved = (gemini_estimator.genai.Client, gemini_estimator._MODEL_TIMEOUT_SECONDS)
+    gemini_estimator.genai.Client = Client
+    gemini_estimator._MODEL_TIMEOUT_SECONDS = 0.2
+    try:
+        return calls, asyncio.run(call())
+    finally:
+        gemini_estimator.genai.Client, gemini_estimator._MODEL_TIMEOUT_SECONDS = saved
+
+
+def test_gemini_stalled_primary_falls_back_to_second_model():
+    calls, result = _run_with_fake_gemini(
+        {"utama"}, lambda: gemini_estimator.estimate_body(_fake_settings(), b"x", "image/jpeg")
+    )
+    assert calls == ["utama", "cadangan"]
+    assert result.height_cm == 170.0
+
+
+def test_gemini_all_models_stalled_returns_clean_503():
+    try:
+        _run_with_fake_gemini(
+            {"utama", "cadangan"},
+            lambda: gemini_estimator.estimate_body(_fake_settings(), b"x", "image/jpeg"),
+        )
+        raise AssertionError("expected HTTPException")
+    except HTTPException as exc:
+        assert exc.status_code == 503
 
 
 def test_prompt_treats_user_text_as_data():
