@@ -23,7 +23,7 @@
     "expo-symbols": "~58.0.5",
     "expo-system-ui": "~58.0.7",
     "expo-web-browser": "~58.1.0",
-    "firebase": "^13.0.0",
+    "firebase": "^13.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
@@ -53,5 +53,9 @@
     "web": "expo start --web",
     "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "@firebase/util@1.15.3": true,
+    "protobufjs@7.6.6": true
+  }
 }
