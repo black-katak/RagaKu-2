@@ -198,6 +198,23 @@ class BodyEstimateResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class MeasurementEstimate(BaseModel):
+    """Body measurements estimated from a photo by Gemini.
+
+    Used only as the Gemini `response_schema`. Every size is optional so the
+    model can answer `null` for what it cannot judge instead of inventing it.
+    The server validates and clamps these before building `MeasurementResult`.
+    """
+
+    waist_cm: Optional[float] = Field(None, description="Waist circumference in cm, or null.")
+    hip_cm: Optional[float] = Field(None, description="Hip circumference in cm, or null.")
+    chest_cm: Optional[float] = Field(None, description="Chest circumference in cm, or null.")
+    shoulder_width_cm: Optional[float] = Field(None, description="Shoulder width in cm, or null.")
+    arm_length_cm: Optional[float] = Field(None, description="Arm length in cm, or null.")
+    confidence: Literal["low", "medium", "high"] = "low"
+    warnings: list[str] = Field(default_factory=list)
+
+
 class MeasurementResult(BaseModel):
     waist_cm: Optional[float] = None
     hip_cm: Optional[float] = None

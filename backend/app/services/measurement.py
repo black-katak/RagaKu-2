@@ -1,5 +1,10 @@
 """Body measurement wrapper (PRD F3).
 
+Note: `POST /api/v1/measure` now estimates measurements with Gemini
+(`gemini_estimator.estimate_measurements`). This module is the legacy
+optional CV path: it is kept for reference and for the output-parsing unit
+tests, but it is no longer wired to any route.
+
 The underlying model (Human-Body-Measurements-using-Computer-Vision) depends on
 TensorFlow 1.13.1, so it is designed to run inside a Docker container. This
 module shells out to a configurable command (MEASUREMENT_COMMAND), passing the
@@ -86,36 +91,6 @@ def _confidence(values: dict[str, float], warnings: list[str]) -> str:
     return "low"
 
 
-def _fallback_estimation(height_cm: float, gender: Gender = Gender.male) -> MeasurementResult:
-    """Generate realistic body measurements from height and gender when CV model container is not configured."""
-    h = max(100.0, min(240.0, float(height_cm or 170.0)))
-    if gender == Gender.female:
-        waist = round(h * 0.43, 1)
-        hip = round(h * 0.58, 1)
-        arm = round(h * 0.32, 1)
-        shoulder = round(h * 0.23, 1)
-        chest = round(h * 0.52, 1)
-    else:
-        waist = round(h * 0.46, 1)
-        hip = round(h * 0.54, 1)
-        arm = round(h * 0.33, 1)
-        shoulder = round(h * 0.25, 1)
-        chest = round(h * 0.55, 1)
-
-    return MeasurementResult(
-        waist_cm=waist,
-        hip_cm=hip,
-        arm_length_cm=arm,
-        shoulder_width_cm=shoulder,
-        chest_cm=chest,
-        confidence="medium",
-        warnings=[
-            "Hasil merupakan estimasi proporsi antropometrik (layanan model CV utama belum aktif)."
-        ],
-        note="Hasil adalah estimasi dari foto. Foto asli dihapus setelah diproses.",
-    )
-
-
 async def run_measurement(
     settings: Settings,
     image_bytes: bytes,
@@ -125,7 +100,11 @@ async def run_measurement(
 ) -> MeasurementResult:
     """Run the CV model on an uploaded image, then delete the image."""
     if not settings.measurement_command:
-        return _fallback_estimation(height_cm, gender)
+        # Never invent numbers: without the CV container there is no measurement.
+        raise MeasurementError(
+            "Layanan pengukuran CV belum dikonfigurasi (MEASUREMENT_COMMAND kosong).",
+            status_code=503,
+        )
 
     fd, path = tempfile.mkstemp(suffix=suffix, prefix="ragaku_")
     try:
