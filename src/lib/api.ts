@@ -279,6 +279,36 @@ async function postPhoto<T>(path: string, form: FormData, failureMessage: string
   return data as T;
 }
 
+export interface PlanMeasurementWire {
+  waist_cm?: number | null;
+  hip_cm?: number | null;
+  chest_cm?: number | null;
+  shoulder_width_cm?: number | null;
+  arm_length_cm?: number | null;
+  neck_cm?: number | null;
+  body_fat_percent?: number | null;
+  whtr?: number | null;
+  whr?: number | null;
+  source?: string | null;
+}
+
+export interface PlanFitnessPreferencesWire {
+  target_weight_kg?: number | null;
+  fitness_goals?: string[];
+  injuries?: string[];
+  equipment?: string[];
+  preferred_activities?: string[];
+  days_per_week?: number | null;
+  session_duration_min?: number | null;
+  gym_membership?: boolean | null;
+}
+
+export interface PlanOptions {
+  measurements?: PlanMeasurementWire | null;
+  fitnessPreferences?: PlanFitnessPreferencesWire | null;
+  preferences?: string | null;
+}
+
 export const api = {
   async healthSummary(profile: Profile, standard: BmiStandard) {
     return postJson<unknown>(
@@ -287,7 +317,16 @@ export const api = {
     );
   },
 
-  async plan(profile: Profile, screening: HealthScreening, preferences?: string) {
+  async plan(
+    profile: Profile,
+    screening: HealthScreening,
+    options?: PlanOptions | string,
+  ): Promise<PlanResponse> {
+    const isString = typeof options === 'string';
+    const prefs = isString ? options : options?.preferences;
+    const measurements = !isString ? options?.measurements : undefined;
+    const fitnessPreferences = !isString ? options?.fitnessPreferences : undefined;
+
     return postJson<PlanResponse>('/api/v1/plan', {
       profile: toWireProfile(profile),
       screening: {
@@ -295,7 +334,9 @@ export const api = {
         has_chronic_illness: screening.hasChronicIllness,
         has_eating_disorder_history: screening.hasEatingDisorderHistory,
       },
-      preferences: preferences || null,
+      measurements: measurements || null,
+      fitness_preferences: fitnessPreferences || null,
+      preferences: prefs || null,
     });
   },
 

@@ -10,7 +10,6 @@ import {
   TextInput,
   useWindowDimensions,
   View,
-  type ScrollViewInstance,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,8 +24,10 @@ import { BottomTabInset, FontFamily, Spacing } from '@/constants/theme';
 import { MOCK_USER_ID } from '@/constants/mockUser';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, api, type PlanResponse } from '@/lib/api';
+import { buildIndicators } from '@/lib/health';
 import { toPlanInputs, type WireCalorieTargets } from '@/lib/mappers';
-import { screeningBlocked, type HealthScreening } from '@/lib/model';
+import { screeningBlocked, type HealthScreening, type MeasurementRecord, type Profile } from '@/lib/model';
+import { storage } from '@/lib/storage';
 import { saveWorkoutPlan } from '@/services/userService';
 
 // Breakpoint above which the web layout splits chat (left) from a standalone
@@ -95,13 +96,42 @@ function buildScreeningUserText(screening: HealthScreening): string {
 function buildPlanSummaryText(plan: PlanResponse): string {
   const firstEx = plan.plan.exercises[0];
   const exerciseText = firstEx ? `${firstEx.name} ${firstEx.duration_min} menit` : plan.plan.summary;
-  return `Siap. Hari ini ${formatThousands(plan.target_calories)} kkal, ${exerciseText}. Mau aku susun apa dulu?`;
+  return `Siap. Hari ini ${formatThousands(plan.target_calories)} kkal, ${exerciseText}. Rencana harianmu sudah siap.`;
+}
+
+function buildPlanAppliedParamsText(
+  profile: Profile,
+  measurement: MeasurementRecord | null,
+): string {
+  const parts: string[] = [];
+  if (measurement?.waistCm) {
+    const src = measurement.source === 'photo' ? 'Scan Foto AI (Gemini)' : 'Pengukuran Manual';
+    const sub: string[] = [`Pinggang ${measurement.waistCm} cm`];
+    if (measurement.hipCm) sub.push(`Pinggul ${measurement.hipCm} cm`);
+    if (measurement.chestCm) sub.push(`Dada ${measurement.chestCm} cm`);
+    if (measurement.shoulderWidthCm) sub.push(`Bahu ${measurement.shoulderWidthCm} cm`);
+    parts.push(`Ukuran Tubuh [${src}]: ${sub.join(', ')}`);
+  }
+  if (profile.injuries && profile.injuries.length > 0 && !profile.injuries.includes('tidak-ada' as any)) {
+    parts.push(`Batasan Cedera: ${profile.injuries.join(', ')} (gerakan berbahaya dihindari)`);
+  }
+  if (profile.equipment && profile.equipment.length > 0) {
+    parts.push(`Peralatan Dimiliki: ${profile.equipment.join(', ')}`);
+  }
+  if (profile.sessionDurationMin) {
+    parts.push(`Target Durasi Latihan: ${profile.sessionDurationMin} menit/sesi`);
+  }
+  if (profile.dietNotes) {
+    parts.push(`Pola Makan / Catatan: ${profile.dietNotes}`);
+  }
+  return parts.length > 0
+    ? `Parameter yang diterapkan pada rencana:\n• ${parts.join('\n• ')}`
+    : '';
 }
 
 /**
- * Free-text input is NOT wired to a real LLM chat endpoint -- backend only
- * has POST /api/v1/plan (structured). Keyword-routes to the 3 quick actions;
- * honest fallback otherwise. See Docs.md backend API list.
+ * Free-text input is routed to plan generator if user asks to customize or create,
+ * otherwise provides helpful answers.
  */
 function routeFreeText(text: string): string {
   const lower = text.toLowerCase();
@@ -114,7 +144,7 @@ function routeFreeText(text: string): string {
   if (/berat|progress|progres/.test(lower)) {
     return 'Catatan berat badan ada di tab Progres. Pakai tombol "Catat berat hari ini" di atas, atau buka tab Progres.';
   }
-  return 'Aku masih fokus bantu urusan latihan, menu makan, dan progres berat badan. Coba salah satu tombol di atas, atau ketik soal itu.';
+  return 'Aku masih fokus bantu urusan latihan, menu makan, dan progres berat badan. Coba salah satu tombol di atas, atau ketik permintaan rencana spesifik.';
 }
 
 export default function RencanaScreen() {
@@ -131,7 +161,7 @@ export default function RencanaScreen() {
 
   const initializedRef = useRef(false);
   const idCounter = useRef(0);
-  const scrollRef = useRef<ScrollViewInstance>(null);
+  const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
   const screeningY = useRef(0);
   const planY = useRef(0);
 
@@ -139,9 +169,7 @@ export default function RencanaScreen() {
 
   const nextId = () => `m-${idCounter.current++}`;
 
-  // Assistant speaks first: intro line, then the screening card (inline on
-  // mobile/narrow-web; filtered out of the thread and shown as a standalone
-  // panel on wide web -- see isWideWeb filtering below).
+  // Assistant speaks first: intro line, then the screening card
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
@@ -149,7 +177,6 @@ export default function RencanaScreen() {
       { id: nextId(), role: 'assistant', kind: 'text', text: INTRO_TEXT },
       { id: nextId(), role: 'assistant', kind: 'screening_card' },
     ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -160,38 +187,85 @@ export default function RencanaScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(screeningY.current - 16, 0), animated: true });
   };
 
-  // ponytail: scrolls to the top of the whole plan_card bubble rather than
-  // the exact exercises/meals sub-section inside it. Upgrade: give each
-  // Card inside PlanView its own onLayout offset if finer scroll is needed.
   const scrollToPlan = () => {
     scrollRef.current?.scrollTo({ y: Math.max(planY.current - 16, 0), animated: true });
   };
 
-  const generate = async () => {
+  const generate = async (customPreference?: string) => {
     if (isGenerating) return;
     setIsGenerating(true);
     const loadingId = nextId();
     setMessages((prev) => [...prev, { id: loadingId, role: 'assistant', kind: 'loading', text: LOADING_TEXT }]);
     try {
-      const result = await api.plan(profile, screening);
+      // 1. Ambil pengukuran tubuh terbaru (termasuk hasil scan badan Gemini dari foto)
+      const measurementsList = await storage.getMeasurements();
+      const latestMeasurement = measurementsList.length ? measurementsList[measurementsList.length - 1] : null;
+
+      let indicators = null;
+      if (latestMeasurement?.waistCm) {
+        indicators = buildIndicators({
+          heightCm: profile.heightCm,
+          gender: profile.gender,
+          waistCm: latestMeasurement.waistCm,
+          neckCm: latestMeasurement.neckCm ?? 0,
+          hipCm: latestMeasurement.hipCm ?? null,
+        });
+      }
+
+      const planMeasurements = latestMeasurement
+        ? {
+            waist_cm: latestMeasurement.waistCm ?? null,
+            hip_cm: latestMeasurement.hipCm ?? null,
+            chest_cm: latestMeasurement.chestCm ?? null,
+            shoulder_width_cm: latestMeasurement.shoulderWidthCm ?? null,
+            arm_length_cm: latestMeasurement.armLengthCm ?? null,
+            neck_cm: latestMeasurement.neckCm ?? null,
+            body_fat_percent: indicators?.bodyFatPercent ?? null,
+            whtr: indicators?.whtr ?? null,
+            whr: indicators?.whr ?? null,
+            source: latestMeasurement.source ?? 'photo',
+          }
+        : null;
+
+      // 2. Kumpulkan seluruh preferensi latihan & kebugaran dari input user
+      const fitnessPreferences = {
+        target_weight_kg: profile.targetWeightKg ?? null,
+        fitness_goals: profile.fitnessGoals ?? [],
+        injuries: profile.injuries ?? [],
+        equipment: profile.equipment ?? [],
+        preferred_activities: profile.preferredActivities ?? [],
+        days_per_week: profile.daysPerWeek ?? null,
+        session_duration_min: profile.sessionDurationMin ?? null,
+        gym_membership: profile.gymMembership ?? null,
+      };
+
+      // 3. Masukkan seluruh parameter ini ke request plan AI
+      const result = await api.plan(profile, screening, {
+        measurements: planMeasurements,
+        fitnessPreferences,
+        preferences: customPreference || null,
+      });
+
       // Show the plan first — persistence must never gate the UI.
       setPlan(result);
       const summaryId = nextId();
+      const paramsId = nextId();
       const cardId = nextId();
+      const appliedParamsText = buildPlanAppliedParamsText(profile, latestMeasurement);
+
       setMessages((prev) =>
         prev.flatMap((m) =>
           m.id === loadingId
             ? [
                 { id: summaryId, role: 'assistant' as const, kind: 'text' as const, text: buildPlanSummaryText(result) },
+                ...(appliedParamsText ? [{ id: paramsId, role: 'assistant' as const, kind: 'text' as const, text: appliedParamsText }] : []),
                 { id: cardId, role: 'assistant' as const, kind: 'plan_card' as const, plan: result },
               ]
             : [m],
         ),
       );
 
-      // `api.healthSummary` is typed `Promise<unknown>`, so its calorie block
-      // is cast to the wire shape the mapper expects. It is optional context:
-      // without it `targets` is simply omitted from the stored plan.
+      // `api.healthSummary` is optional context
       let calories: WireCalorieTargets | null = null;
       try {
         const summary = (await api.healthSummary(profile, profile.bmiStandard)) as {
@@ -199,7 +273,7 @@ export default function RencanaScreen() {
         } | null;
         calories = summary?.calories ?? null;
       } catch {
-        // Non-fatal: the plan itself already carries target_calories.
+        // Non-fatal
       }
 
       try {
@@ -244,7 +318,7 @@ export default function RencanaScreen() {
   };
 
   const handleEditScreening = () => {
-    if (isWideWeb) return; // standalone panel is always visible already
+    if (isWideWeb) return;
     scrollToScreening();
   };
 
@@ -264,13 +338,12 @@ export default function RencanaScreen() {
       if (!isWideWeb) scrollToScreening();
       return;
     }
-    if (blocked) return; // already explained via the screening_blocked message
+    if (blocked) return;
     if (!plan) {
       pushOfferGenerate();
       return;
     }
     scrollToPlan();
-    void target; // same bubble for both targets today; see ponytail note on scrollToPlan
   };
 
   const handleSend = () => {
@@ -280,8 +353,21 @@ export default function RencanaScreen() {
     setMessages((prev) => [
       ...prev,
       { id: nextId(), role: 'user', kind: 'text', text },
-      { id: nextId(), role: 'assistant', kind: 'text', text: routeFreeText(text) },
     ]);
+    if (!screeningConfirmed) {
+      if (!isWideWeb) scrollToScreening();
+      return;
+    }
+    if (blocked) return;
+    const lower = text.toLowerCase();
+    if (/susun|buat|rencana|plan|latihan|olahraga|makan|menu|diet|ganti|fokus|tanpa/.test(lower)) {
+      void generate(text);
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: 'assistant', kind: 'text', text: routeFreeText(text) },
+      ]);
+    }
   };
 
   const visibleMessages = isWideWeb ? messages.filter((m) => m.kind !== 'screening_card') : messages;

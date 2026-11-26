@@ -12,6 +12,14 @@ export interface Profile {
   goal: Goal;
   dietNotes?: string;
   bmiStandard: BmiStandard;
+  targetWeightKg?: number;
+  fitnessGoals?: string[];
+  injuries?: string[];
+  equipment?: string[];
+  preferredActivities?: string[];
+  daysPerWeek?: number;
+  sessionDurationMin?: number;
+  gymMembership?: boolean;
 }
 
 /** PRD section 7 screening answers. */

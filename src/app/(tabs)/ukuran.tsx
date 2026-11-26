@@ -13,10 +13,12 @@ import { NumberStepper } from '@/components/ui/number-stepper';
 import { PillButton } from '@/components/ui/pill-button';
 import { StatTile } from '@/components/ui/stat-tile';
 import { BottomTabInset, FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MOCK_USER_ID } from '@/constants/mockUser';
 import { useTheme } from '@/hooks/use-theme';
 import { buildIndicators } from '@/lib/health';
 import type { MeasurementRecord } from '@/lib/model';
 import { storage } from '@/lib/storage';
+import { updateUserMeasurements } from '@/services/userService';
 
 // Default angka manual yang wajar untuk dewasa, dipakai hanya saat belum ada record sama sekali.
 const MANUAL_DEFAULTS = { waistCm: 80, hipCm: 95, neckCm: 38, chestCm: 90, shoulderWidthCm: 44 };
@@ -67,6 +69,17 @@ export default function UkuranScreen() {
       source: 'manual',
     });
     setLatest(next[next.length - 1]);
+    try {
+      await updateUserMeasurements(MOCK_USER_ID, {
+        waistCm,
+        hipCm,
+        neckCm,
+        chestCm,
+        shoulderWidthCm,
+      });
+    } catch {
+      // Non-fatal if Firestore is offline
+    }
   };
 
   const indicators = useMemo(() => {

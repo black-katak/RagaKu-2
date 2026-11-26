@@ -103,6 +103,14 @@ export function toProfilePatch(data: OnboardingData): Partial<Profile> {
     weightKg: data.weightKg,
     goal,
     activityLevel,
+    targetWeightKg: data.targetWeightKg,
+    fitnessGoals: data.goals,
+    injuries: data.injuries,
+    equipment: data.equipment,
+    preferredActivities: data.activities,
+    daysPerWeek: data.daysPerWeek,
+    sessionDurationMin: data.sessionDuration,
+    gymMembership: data.gymMembership,
   };
 }
 

@@ -47,15 +47,16 @@ export default function ProfilScreen() {
   const [age, setAge] = useState(profile.age);
   const [heightCm, setHeightCm] = useState(profile.heightCm);
   const [weightKg, setWeightKg] = useState(profile.weightKg);
-  const [saved, setSaved] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
+  const [prevProfile, setPrevProfile] = useState(profile);
+  if (prevProfile !== profile) {
+    setPrevProfile(profile);
     setGender(profile.gender);
     setAge(profile.age);
     setHeightCm(profile.heightCm);
     setWeightKg(profile.weightKg);
-  }, [profile.gender, profile.age, profile.heightCm, profile.weightKg]);
+  }
+  const [saved, setSaved] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {

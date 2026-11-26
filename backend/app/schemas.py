@@ -139,12 +139,42 @@ class IndicatorResult(BaseModel):
 # --------------------------------------------------------------------------- #
 # AI daily plan (PRD F5)
 # --------------------------------------------------------------------------- #
+class MeasurementInput(BaseModel):
+    """Pengukuran tubuh (lingkar dan estimasi), baik dari scan badan Gemini maupun input manual."""
+
+    waist_cm: Optional[float] = Field(default=None, ge=30, le=250, description="Lingkar pinggang (cm).")
+    hip_cm: Optional[float] = Field(default=None, ge=40, le=250, description="Lingkar pinggul (cm).")
+    chest_cm: Optional[float] = Field(default=None, ge=40, le=250, description="Lingkar dada (cm).")
+    shoulder_width_cm: Optional[float] = Field(default=None, ge=20, le=100, description="Lebar bahu (cm).")
+    arm_length_cm: Optional[float] = Field(default=None, ge=30, le=120, description="Panjang lengan (cm).")
+    neck_cm: Optional[float] = Field(default=None, ge=20, le=80, description="Lingkar leher (cm).")
+    body_fat_percent: Optional[float] = Field(default=None, ge=2, le=70, description="Estimasi lemak tubuh (%).")
+    whtr: Optional[float] = Field(default=None, ge=0.2, le=1.5, description="Waist-to-height ratio.")
+    whr: Optional[float] = Field(default=None, ge=0.3, le=2.0, description="Waist-to-hip ratio.")
+    source: Optional[str] = Field(default=None, description="Sumber: 'photo' (Gemini scan) atau 'manual'.")
+
+
+class FitnessPreferences(BaseModel):
+    """Parameter preferensi dan batasan olahraga yang diinput user."""
+
+    target_weight_kg: Optional[float] = Field(default=None, ge=30, le=250)
+    fitness_goals: list[str] = Field(default_factory=list, description="Target kebugaran, misal turun-berat, bentuk-otot.")
+    injuries: list[str] = Field(default_factory=list, description="Cedera atau batasan fisik, misal lutut, punggung, bahu, asma.")
+    equipment: list[str] = Field(default_factory=list, description="Alat olahraga yang dimiliki, misal bodyweight, dumbbell.")
+    preferred_activities: list[str] = Field(default_factory=list, description="Aktivitas favorit, misal lari, calisthenics, renang.")
+    days_per_week: Optional[int] = Field(default=None, ge=1, le=7)
+    session_duration_min: Optional[int] = Field(default=None, ge=10, le=180)
+    gym_membership: Optional[bool] = None
+
+
 class PlanRequest(BaseModel):
     profile: Profile
     screening: HealthScreening = HealthScreening()
+    measurements: Optional[MeasurementInput] = None
+    fitness_preferences: Optional[FitnessPreferences] = None
     # Optional free-text; treated strictly as data, never as instructions
     # (PRD section 7: prompt-injection mitigation).
-    preferences: Optional[str] = Field(default=None, max_length=300)
+    preferences: Optional[str] = Field(default=None, max_length=500)
 
 
 class ExerciseItem(BaseModel):

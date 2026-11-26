@@ -13,10 +13,12 @@ import { Card } from '@/components/ui/card';
 import { PillButton } from '@/components/ui/pill-button';
 import { StatTile } from '@/components/ui/stat-tile';
 import { FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MOCK_USER_ID } from '@/constants/mockUser';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, api, type MeasurementResponse } from '@/lib/api';
 import { buildIndicators } from '@/lib/health';
 import { storage } from '@/lib/storage';
+import { updateUserMeasurements } from '@/services/userService';
 
 type Phase = 'consent' | 'capture' | 'processing' | 'result';
 
@@ -78,6 +80,17 @@ export default function MeasurementScreen() {
       chestCm: pendingResult.chest_cm,
       source: 'photo',
     });
+    try {
+      await updateUserMeasurements(MOCK_USER_ID, {
+        waistCm: pendingResult.waist_cm,
+        hipCm: pendingResult.hip_cm,
+        armLengthCm: pendingResult.arm_length_cm,
+        shoulderWidthCm: pendingResult.shoulder_width_cm,
+        chestCm: pendingResult.chest_cm,
+      });
+    } catch {
+      // Non-fatal if Firestore is offline
+    }
     router.back();
   };
 

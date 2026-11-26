@@ -246,5 +246,39 @@ export async function updateUserBodyMetrics(
   }
 }
 
+/**
+ * Update circumference / scan metrics on `users/{uid}`.
+ */
+export async function updateUserMeasurements(
+  uid: string,
+  measurements: {
+    waistCm?: number | null;
+    hipCm?: number | null;
+    chestCm?: number | null;
+    shoulderWidthCm?: number | null;
+    armLengthCm?: number | null;
+    neckCm?: number | null;
+  },
+): Promise<void> {
+  requireUid(uid, 'updateUserMeasurements');
+
+  try {
+    await setDoc(
+      doc(db, COLLECTIONS.users, uid),
+      {
+        metrics: stripUndefined(measurements as unknown as Record<string, unknown>),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    throw new UserServiceError(
+      'updateUserMeasurements',
+      `Gagal menyimpan lingkar tubuh (${uid}).`,
+      { cause: error },
+    );
+  }
+}
+
 /** Re-exported for callers that need to build timestamps client-side. */
 export { Timestamp };
